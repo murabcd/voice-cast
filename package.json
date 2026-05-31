@@ -1,0 +1,53 @@
+{
+	"name": "cartoon-voice",
+	"version": "1.0.0",
+	"private": true,
+	"description": "Local Russian speech-to-speech cartoon voice app for Apple Silicon.",
+	"packageManager": "bun@1.3.13",
+	"main": "index.js",
+	"scripts": {
+		"dev": "concurrently --kill-others-on-fail -n web,voice,llm -c cyan,green,magenta \"bun run dev:web\" \"bun run dev:voice\" \"bun run dev:llm\"",
+		"dev:web": "vite --host 127.0.0.1 --port 3000 --strictPort",
+		"dev:voice": "node server/voice-server.mjs",
+		"dev:llm": "scripts/run_llama_server.sh",
+		"build": "vite build",
+		"llm:smollm": "MODEL=models/llm/smollm3-3b/HuggingFaceTB_SmolLM3-3B-Q4_K_M.gguf scripts/run_llama_server.sh",
+		"check:voice": "node --check server/voice-server.mjs && for f in server/voice/*.mjs; do node --check \"$f\" || exit 1; done",
+		"typecheck": "tsc -p web/tsconfig.json --noEmit",
+		"lint": "biome check package.json biome.json vite.config.ts index.html web/src server",
+		"format": "biome format --write package.json biome.json vite.config.ts index.html web/src server",
+		"test": "vitest run --passWithNoTests",
+		"test:watch": "vitest",
+		"check": "bun run lint && bun run typecheck && bun run check:voice && bun run test"
+	},
+	"keywords": [],
+	"author": "",
+	"license": "ISC",
+	"type": "commonjs",
+	"dependencies": {
+		"@fontsource-variable/geist": "^5.2.9",
+		"class-variance-authority": "^0.7.1",
+		"clsx": "^2.1.1",
+		"lucide-react": "^1.17.0",
+		"radix-ui": "^1.4.3",
+		"react": "^19.1.0",
+		"react-dom": "^19.1.0",
+		"shadcn": "^4.9.0",
+		"tailwind-merge": "^3.6.0",
+		"ws": "^8.21.0"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "2.4.16",
+		"@tailwindcss/vite": "^4.3.0",
+		"@types/node": "^25.9.1",
+		"@types/react": "^19.1.6",
+		"@types/react-dom": "^19.1.5",
+		"@vitejs/plugin-react": "^5.0.0",
+		"concurrently": "^10.0.0",
+		"tailwindcss": "^4.3.0",
+		"tw-animate-css": "^1.4.0",
+		"typescript": "^5.8.3",
+		"vite": "^6.3.5",
+		"vitest": "^4.1.7"
+	}
+}

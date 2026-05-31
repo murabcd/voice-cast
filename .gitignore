@@ -1,0 +1,11 @@
+node_modules/
+web/dist/
+native/voice-stt-worker/target/
+
+models/
+vendor/supertonic/nodejs/node_modules/
+
+.DS_Store
+.env
+.env.*
+*.log
