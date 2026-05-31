@@ -6,7 +6,10 @@ import { streamLlamaReply } from "./voice/llama.mjs";
 import { log } from "./voice/logger.mjs";
 import { createStaticServer } from "./voice/static-server.mjs";
 import { SttWorker } from "./voice/stt-worker.mjs";
-import { SupertonicTtsWorker } from "./voice/supertonic-tts-worker.mjs";
+import {
+	SupertonicTtsWorker,
+	supertonicLanguages,
+} from "./voice/supertonic-tts-worker.mjs";
 import { cleanLlmText, createSentenceChunker } from "./voice/text.mjs";
 import {
 	sampleRatePayload,
@@ -33,6 +36,13 @@ let shuttingDown = false;
 
 const clientSettings = new WeakMap();
 
+function parseNumber(value, { min, max }) {
+	const parsed = Number(value);
+	if (!Number.isFinite(parsed)) return undefined;
+	if (parsed < min || parsed > max) return undefined;
+	return parsed;
+}
+
 function cancelTurn(reason) {
 	activeTurnId += 1;
 	activeAbort?.abort();
@@ -52,6 +62,7 @@ function speakSentence(ws, sentence, turnId) {
 	const text = cleanLlmText(sentence);
 	if (!text || turnId !== activeTurnId || ws.readyState !== WebSocket.OPEN)
 		return;
+	const settings = clientSettings.get(ws) ?? {};
 	sendJson(ws, { type: "state", phase: "speaking" });
 	const queuedAt = Date.now();
 	log(
@@ -60,6 +71,7 @@ function speakSentence(ws, sentence, turnId) {
 	);
 	try {
 		tts.speak(text, {
+			lang: settings.language,
 			onStart: (sampleRate) => {
 				if (turnId === activeTurnId) {
 					log(
@@ -118,9 +130,9 @@ async function handleFinal(ws, transcript) {
 			signal: controller.signal,
 			systemPrompt: settings.systemPrompt,
 			maxTokens: settings.maxTokens ?? config.llama.maxTokens,
-			temperature: config.llama.temperature,
-			topP: config.llama.topP,
-			repeatPenalty: config.llama.repeatPenalty,
+			temperature: settings.temperature ?? config.llama.temperature,
+			topP: settings.topP ?? config.llama.topP,
+			repeatPenalty: settings.repeatPenalty ?? config.llama.repeatPenalty,
 		})) {
 			if (turnId !== activeTurnId) return;
 			if (!firstDeltaAt) {
@@ -201,12 +213,17 @@ wss.on("connection", (ws) => {
 			const msg = JSON.parse(String(data));
 			if (msg.type === "settings") {
 				const maxTokens = Number(msg.maxTokens);
+				const language = String(msg.language ?? "").trim();
 				clientSettings.set(ws, {
 					systemPrompt: String(msg.systemPrompt ?? "").trim(),
+					language: supertonicLanguages.has(language) ? language : undefined,
 					maxTokens:
 						Number.isInteger(maxTokens) && maxTokens > 0
 							? maxTokens
 							: undefined,
+					temperature: parseNumber(msg.temperature, { min: 0, max: 2 }),
+					topP: parseNumber(msg.topP, { min: 0, max: 1 }),
+					repeatPenalty: parseNumber(msg.repeatPenalty, { min: 1, max: 2 }),
 				});
 				return;
 			}

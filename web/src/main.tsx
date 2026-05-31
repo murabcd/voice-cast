@@ -1,111 +1,74 @@
-import {
-	ArrowRight,
-	Check,
-	ChevronLeft,
-	ChevronRight,
-	MicOff,
-	Play,
-	Volume2,
-	Waves,
-} from "lucide-react";
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { Button } from "@/components/ui/button";
-import {
-	Dialog,
-	DialogContent,
-	DialogHeader,
-	DialogTitle,
-} from "@/components/ui/dialog";
+import { characters, languages } from "./app-data";
+import type { Phase, Screen, SettingsAction, SettingsState } from "./app-types";
+import { PickScreen, SettingsDialog, WelcomeScreen } from "./app-ui";
 import "./styles.css";
 
-type Phase = "idle" | "hearing" | "thinking" | "speaking";
-type Screen = "welcome" | "pick";
+const defaultPrompt =
+	"Ты локальный голосовой ассистент для живого разговора. Отвечай на выбранном языке. Отвечай естественно, кратко и по делу. Если фраза пользователя распознана неполно, уточни, что именно он имел в виду. Формулируй ответы так, чтобы они звучали естественно при синтезе речи: используй обычную пунктуацию и избегай латиницы там, где можно сказать на выбранном языке.";
+const selectedCharacterKey = "cartoon-voice:selected-character";
+const selectedLanguageKey = "cartoon-voice:selected-language";
 
-interface Character {
-	id: number;
-	name: string;
-	image: string;
-	prompt: string;
+interface ViewState {
+	canScrollLeft: boolean;
+	canScrollRight: boolean;
+	previewAnimation: boolean;
+	screen: Screen;
+	selectedId: number;
 }
 
-const characters: Character[] = [
-	{
-		id: 1,
-		name: "Firefighter",
-		image:
-			"https://7zjbnnvanyvles15.public.blob.vercel-storage.com/default-characters/firefighter-16x9.png",
-		prompt:
-			"Ты говоришь как добрый мультяшный пожарный: спокойно, уверенно и с короткими практичными ответами.",
-	},
-	{
-		id: 2,
-		name: "Vampire Girl",
-		image:
-			"https://7zjbnnvanyvles15.public.blob.vercel-storage.com/default-characters/vampire-girl-16x9.png",
-		prompt:
-			"Ты говоришь как дружелюбная мультяшная вампирша: чуть загадочно, но понятно и по делу.",
-	},
-	{
-		id: 3,
-		name: "Disco Robot",
-		image:
-			"https://7zjbnnvanyvles15.public.blob.vercel-storage.com/default-characters/disco-robot-16x9.png",
-		prompt:
-			"Ты говоришь как веселый диско-робот: энергично, лаконично, с ясной структурой.",
-	},
-	{
-		id: 4,
-		name: "Alien Chef",
-		image:
-			"https://7zjbnnvanyvles15.public.blob.vercel-storage.com/default-characters/alien-chef-16x9.png",
-		prompt:
-			"Ты говоришь как мультяшный инопланетный шеф: тепло, образно, но без длинных монологов.",
-	},
-	{
-		id: 5,
-		name: "Hacker Grandma",
-		image:
-			"https://7zjbnnvanyvles15.public.blob.vercel-storage.com/default-characters/hacker-grandma-16x9.png",
-		prompt:
-			"Ты говоришь как мультяшная хакер-бабушка: умно, тепло, с короткими ясными советами.",
-	},
-	{
-		id: 6,
-		name: "Grumpy Wizard",
-		image:
-			"https://7zjbnnvanyvles15.public.blob.vercel-storage.com/default-characters/grumpy-wizard-16x9.png",
-		prompt:
-			"Ты говоришь как ворчливый, но добрый волшебник: с характером, но полезно и понятно.",
-	},
-	{
-		id: 7,
-		name: "Knight Princess",
-		image:
-			"https://7zjbnnvanyvles15.public.blob.vercel-storage.com/default-characters/knight-princess-16x9.png",
-		prompt:
-			"Ты говоришь как храбрая мультяшная принцесса-рыцарь: уверенно, заботливо и кратко.",
-	},
-	{
-		id: 8,
-		name: "Space Pirate",
-		image:
-			"https://7zjbnnvanyvles15.public.blob.vercel-storage.com/default-characters/space-pirate-16x9.png",
-		prompt:
-			"Ты говоришь как космический пират: живо, дерзко, но дружелюбно и по-русски.",
-	},
-	{
-		id: 9,
-		name: "Wise King",
-		image:
-			"https://7zjbnnvanyvles15.public.blob.vercel-storage.com/default-characters/wise-king-16x9.png",
-		prompt:
-			"Ты говоришь как мудрый мультяшный король: спокойно, точно, без лишней церемонии.",
-	},
-];
+function settingsReducer(
+	state: SettingsState,
+	action: SettingsAction,
+): SettingsState {
+	switch (action.type) {
+		case "setOpen":
+			return { ...state, open: action.value };
+		case "setSystemPrompt":
+			return { ...state, systemPrompt: action.value };
+		case "setLanguageCode":
+			return { ...state, languageCode: action.value };
+		case "setMaxTokens":
+			return { ...state, maxTokens: action.value };
+		case "setTemperature":
+			return { ...state, temperature: action.value };
+		case "setTopP":
+			return { ...state, topP: action.value };
+		case "setRepeatPenalty":
+			return { ...state, repeatPenalty: action.value };
+		case "setAdvancedOpen":
+			return { ...state, advancedOpen: action.value };
+	}
+}
 
-const defaultPrompt =
-	"Ты локальный русскоязычный голосовой ассистент для живого разговора. Отвечай только на русском языке. Отвечай естественно и по делу. Если фраза пользователя распознана неполно, уточни, что именно он имел в виду. Пиши текст удобно для синтеза речи: естественная пунктуация, без латиницы там, где можно сказать по-русски.";
+function viewReducer(state: ViewState, patch: Partial<ViewState>): ViewState {
+	return { ...state, ...patch };
+}
+
+function getInitialSelectedId() {
+	const fallback = characters[0]?.id ?? 1;
+	try {
+		const stored = Number(localStorage.getItem(selectedCharacterKey));
+		return characters.some((character) => character.id === stored)
+			? stored
+			: fallback;
+	} catch {
+		return fallback;
+	}
+}
+
+function getInitialLanguage() {
+	try {
+		const stored = localStorage.getItem(selectedLanguageKey);
+		return languages.some((language) => language.code === stored)
+			? (stored ?? "ru")
+			: "ru";
+	} catch {
+		return "ru";
+	}
+}
 
 function downsampleTo16k(input: Float32Array, sampleRate: number) {
 	if (sampleRate === 16000) return input;
@@ -140,20 +103,50 @@ function pcm16ToFloat(bytes: Uint8Array) {
 	return out;
 }
 
+function getPlaybackSources(
+	ref: React.RefObject<Set<AudioBufferSourceNode> | null>,
+) {
+	if (!ref.current) ref.current = new Set<AudioBufferSourceNode>();
+	return ref.current;
+}
+
+function cancelAnimationFrameRef(ref: React.RefObject<number>) {
+	const frame = ref.current;
+	if (!frame) return;
+	cancelAnimationFrame(frame);
+	ref.current = 0;
+}
+
 function App() {
-	const [screen, setScreen] = React.useState<Screen>("welcome");
-	const [selectedId, setSelectedId] = React.useState(1);
+	const [view, setView] = React.useReducer(viewReducer, {
+		canScrollLeft: false,
+		canScrollRight: false,
+		previewAnimation: false,
+		screen: "welcome",
+		selectedId: getInitialSelectedId(),
+	});
 	const [phase, setPhase] = React.useState<Phase>("idle");
-	const [settingsOpen, setSettingsOpen] = React.useState(false);
-	const [systemPrompt, setSystemPrompt] = React.useState(defaultPrompt);
-	const [maxTokens, setMaxTokens] = React.useState("");
+	const [settings, dispatchSettings] = React.useReducer(settingsReducer, {
+		open: false,
+		systemPrompt: defaultPrompt,
+		languageCode: getInitialLanguage(),
+		maxTokens: "512",
+		temperature: "0.35",
+		topP: "0.9",
+		repeatPenalty: "1.05",
+		advancedOpen: false,
+	});
 	const [active, setActive] = React.useState(false);
-	const [canScrollLeft, setCanScrollLeft] = React.useState(false);
-	const [canScrollRight, setCanScrollRight] = React.useState(false);
+	const [jawOpen, setJawOpen] = React.useState(0);
 
 	const selected =
-		characters.find((character) => character.id === selectedId) ??
+		characters.find((character) => character.id === view.selectedId) ??
 		characters[0];
+	const selectedLanguage =
+		languages.find((language) => language.code === settings.languageCode) ??
+		languages[0];
+	const selectedCharacterPrompt =
+		settings.languageCode === "ru" ? selected.prompts.ru : selected.prompts.en;
 	const scrollRef = React.useRef<HTMLDivElement>(null);
 	const wsRef = React.useRef<WebSocket | null>(null);
 	const micStreamRef = React.useRef<MediaStream | null>(null);
@@ -161,22 +154,36 @@ function App() {
 	const processorRef = React.useRef<ScriptProcessorNode | null>(null);
 	const playbackContextRef = React.useRef<AudioContext | null>(null);
 	const playbackCursorRef = React.useRef(0);
-	const playbackSourcesRef = React.useRef(new Set<AudioBufferSourceNode>());
+	const playbackSourcesRef = React.useRef<Set<AudioBufferSourceNode> | null>(
+		null,
+	);
+	const playbackAnalyserRef = React.useRef<AnalyserNode | null>(null);
+	const jawRafRef = React.useRef(0);
+	const jawOpenRef = React.useRef(0);
 	const outputActiveRef = React.useRef(false);
 	const serverPhaseRef = React.useRef<Phase>("idle");
 	const bargeFramesRef = React.useRef(0);
 	const scrollRafRef = React.useRef(0);
+	const updateScrollButtonsRef = React.useRef<() => void>(() => undefined);
 
 	const stopPlayback = React.useCallback(async () => {
 		outputActiveRef.current = false;
-		for (const source of playbackSourcesRef.current) {
+		if (jawRafRef.current) {
+			cancelAnimationFrame(jawRafRef.current);
+			jawRafRef.current = 0;
+		}
+		playbackAnalyserRef.current = null;
+		jawOpenRef.current = 0;
+		setJawOpen(0);
+		const playbackSources = getPlaybackSources(playbackSourcesRef);
+		for (const source of playbackSources) {
 			try {
 				source.stop();
 			} catch {
 				// Already stopped.
 			}
 		}
-		playbackSourcesRef.current.clear();
+		playbackSources.clear();
 		playbackCursorRef.current = 0;
 		if (
 			playbackContextRef.current &&
@@ -185,6 +192,33 @@ function App() {
 			await playbackContextRef.current.close().catch(() => undefined);
 		}
 		playbackContextRef.current = null;
+	}, []);
+
+	const startJawMeter = React.useCallback(() => {
+		if (jawRafRef.current) return;
+		const tick = () => {
+			const analyser = playbackAnalyserRef.current;
+			if (!outputActiveRef.current || !analyser) {
+				jawRafRef.current = 0;
+				jawOpenRef.current *= 0.65;
+				setJawOpen(jawOpenRef.current < 0.02 ? 0 : jawOpenRef.current);
+				return;
+			}
+
+			const samples = new Uint8Array(analyser.fftSize);
+			analyser.getByteTimeDomainData(samples);
+			let sum = 0;
+			for (const sample of samples) {
+				const centered = (sample - 128) / 128;
+				sum += centered * centered;
+			}
+			const rms = Math.sqrt(sum / samples.length);
+			const target = Math.min(1, Math.max(0, (rms - 0.01) * 7.5));
+			jawOpenRef.current = jawOpenRef.current * 0.54 + target * 0.46;
+			setJawOpen(jawOpenRef.current);
+			jawRafRef.current = requestAnimationFrame(tick);
+		};
+		jawRafRef.current = requestAnimationFrame(tick);
 	}, []);
 
 	const playPcm = React.useCallback(
@@ -199,6 +233,15 @@ function App() {
 				playbackCursorRef.current =
 					playbackContextRef.current.currentTime + 0.03;
 			}
+			if (!playbackAnalyserRef.current) {
+				playbackAnalyserRef.current =
+					playbackContextRef.current.createAnalyser();
+				playbackAnalyserRef.current.fftSize = 512;
+				playbackAnalyserRef.current.smoothingTimeConstant = 0.24;
+				playbackAnalyserRef.current.connect(
+					playbackContextRef.current.destination,
+				);
+			}
 			if (playbackContextRef.current.state === "suspended")
 				await playbackContextRef.current.resume();
 			const samples = pcm16ToFloat(bytes);
@@ -210,12 +253,16 @@ function App() {
 			buffer.copyToChannel(samples, 0);
 			const source = playbackContextRef.current.createBufferSource();
 			source.buffer = buffer;
-			source.connect(playbackContextRef.current.destination);
-			playbackSourcesRef.current.add(source);
+			source.connect(playbackAnalyserRef.current);
+			const playbackSources = getPlaybackSources(playbackSourcesRef);
+			playbackSources.add(source);
+			startJawMeter();
 			source.onended = () => {
-				playbackSourcesRef.current.delete(source);
-				if (playbackSourcesRef.current.size === 0) {
+				playbackSources.delete(source);
+				if (playbackSources.size === 0) {
 					outputActiveRef.current = false;
+					jawOpenRef.current = 0;
+					setJawOpen(0);
 					setPhase(
 						serverPhaseRef.current === "thinking" ? "thinking" : "hearing",
 					);
@@ -228,7 +275,7 @@ function App() {
 			source.start(startAt);
 			playbackCursorRef.current = startAt + buffer.duration;
 		},
-		[],
+		[startJawMeter],
 	);
 
 	const stopChat = React.useCallback(
@@ -335,8 +382,12 @@ function App() {
 			ws.send(
 				JSON.stringify({
 					type: "settings",
-					systemPrompt: `${systemPrompt}\n\nCharacter voice: ${selected.prompt}`,
-					maxTokens,
+					systemPrompt: `${settings.systemPrompt}\n\nConversation language: ${selectedLanguage.name}. Reply only in ${selectedLanguage.name}.\n\nCharacter voice: ${selectedCharacterPrompt}`,
+					language: selectedLanguage.code,
+					maxTokens: settings.maxTokens,
+					temperature: settings.temperature,
+					topP: settings.topP,
+					repeatPenalty: settings.repeatPenalty,
 				}),
 			);
 			serverPhaseRef.current = "hearing";
@@ -369,13 +420,53 @@ function App() {
 	}, [
 		handleMicAudio,
 		handleServerMessage,
-		maxTokens,
-		selected.prompt,
+		selectedCharacterPrompt,
+		selectedLanguage.code,
+		selectedLanguage.name,
+		settings.maxTokens,
+		settings.repeatPenalty,
+		settings.systemPrompt,
+		settings.temperature,
+		settings.topP,
 		stopChat,
-		systemPrompt,
 	]);
 
 	React.useEffect(() => () => void stopChat(), [stopChat]);
+
+	React.useEffect(() => {
+		try {
+			localStorage.setItem(selectedCharacterKey, String(view.selectedId));
+		} catch {
+			// Persistence is optional.
+		}
+	}, [view.selectedId]);
+
+	React.useEffect(() => {
+		try {
+			localStorage.setItem(selectedLanguageKey, settings.languageCode);
+		} catch {
+			// Persistence is optional.
+		}
+	}, [settings.languageCode]);
+
+	React.useEffect(() => {
+		if (!view.previewAnimation) return;
+		let raf = 0;
+		const startedAt = performance.now();
+		const tick = (now: number) => {
+			const elapsed = (now - startedAt) / 1000;
+			const pulse =
+				Math.max(0, Math.sin(elapsed * 12)) * 0.68 +
+				Math.max(0, Math.sin(elapsed * 21)) * 0.32;
+			setJawOpen(pulse);
+			raf = requestAnimationFrame(tick);
+		};
+		raf = requestAnimationFrame(tick);
+		return () => {
+			cancelAnimationFrame(raf);
+			setJawOpen(0);
+		};
+	}, [view.previewAnimation]);
 
 	const updateScrollButtons = React.useCallback(() => {
 		if (scrollRafRef.current) return;
@@ -386,27 +477,29 @@ function App() {
 			const nextCanScrollLeft = el.scrollLeft > 10;
 			const nextCanScrollRight =
 				el.scrollLeft < el.scrollWidth - el.clientWidth - 10;
-			setCanScrollLeft((current) =>
-				current === nextCanScrollLeft ? current : nextCanScrollLeft,
-			);
-			setCanScrollRight((current) =>
-				current === nextCanScrollRight ? current : nextCanScrollRight,
-			);
+			if (
+				view.canScrollLeft !== nextCanScrollLeft ||
+				view.canScrollRight !== nextCanScrollRight
+			) {
+				setView({
+					canScrollLeft: nextCanScrollLeft,
+					canScrollRight: nextCanScrollRight,
+				});
+			}
 		});
-	}, []);
+	}, [view.canScrollLeft, view.canScrollRight]);
+	updateScrollButtonsRef.current = updateScrollButtons;
 
 	React.useEffect(() => {
-		if (screen !== "pick") return;
-		updateScrollButtons();
-		window.addEventListener("resize", updateScrollButtons);
+		if (view.screen !== "pick") return;
+		const handleResize = () => updateScrollButtonsRef.current();
+		handleResize();
+		window.addEventListener("resize", handleResize);
 		return () => {
-			window.removeEventListener("resize", updateScrollButtons);
-			if (scrollRafRef.current) {
-				cancelAnimationFrame(scrollRafRef.current);
-				scrollRafRef.current = 0;
-			}
+			window.removeEventListener("resize", handleResize);
+			cancelAnimationFrameRef(scrollRafRef);
 		};
-	}, [screen, updateScrollButtons]);
+	}, [view.screen]);
 
 	const scroll = (direction: "left" | "right") => {
 		scrollRef.current?.scrollBy({
@@ -414,180 +507,58 @@ function App() {
 			behavior: "smooth",
 		});
 	};
+	const avatarIsSpeaking = phase === "speaking" || view.previewAnimation;
+	const selectedVoicePrompt = `Character voice: ${selectedCharacterPrompt}`;
+
+	const handleStartStop = () => (active ? void stopChat() : void startChat());
 
 	return (
 		<main className="app-shell">
-			<button
+			<Button
 				type="button"
+				variant="ghost"
 				className="brand"
-				onClick={() => setScreen("welcome")}
+				onClick={() => setView({ screen: "welcome" })}
 			>
-				<Waves aria-hidden="true" />
 				<span>Cartoon Voice</span>
-			</button>
+			</Button>
 
-			{screen === "welcome" && (
-				<section className="welcome-screen">
-					<div className="welcome-inner">
-						<h1>Talk with a cartoon</h1>
-						<button
-							type="button"
-							className={`demo-card ${active ? "is-active" : ""}`}
-							onClick={() => (active ? void stopChat() : void startChat())}
-							aria-label={active ? "Stop voice chat" : "Start voice chat"}
-						>
-							<img src={selected.image} alt="" />
-							<span className="play-button">
-								{active ? <MicOff /> : <Play fill="currentColor" />}
-							</span>
-							<span className="demo-label">
-								{active ? phase : "Speak directly"}
-							</span>
-							<span className="avatar-badge">
-								<img src={selected.image} alt="" />
-								{selected.name}
-							</span>
-						</button>
-
-						<ul className="steps" aria-label="Conversation steps">
-							<li className="step active">
-								<b>1</b>Pick a character
-							</li>
-							<ArrowRight aria-hidden="true" />
-							<li className="step">
-								<b>2</b>Start speaking
-							</li>
-							<ArrowRight aria-hidden="true" />
-							<li className="step">
-								<b>3</b>Hear the reply
-							</li>
-						</ul>
-
-						<Button
-							className="button button-primary primary-cta"
-							onClick={() => void startChat()}
-						>
-							Get started
-						</Button>
-						<div className="secondary-actions">
-							<Button
-								variant="secondary"
-								className="button button-secondary"
-								onClick={() => setSettingsOpen(true)}
-							>
-								Settings
-							</Button>
-							<Button
-								variant="secondary"
-								className="button button-secondary"
-								onClick={() => setScreen("pick")}
-							>
-								Character
-							</Button>
-						</div>
-					</div>
-				</section>
+			{view.screen === "welcome" && (
+				<WelcomeScreen
+					active={active}
+					avatarIsSpeaking={avatarIsSpeaking}
+					jawOpen={jawOpen}
+					onCharacter={() => setView({ screen: "pick" })}
+					onSettings={() => dispatchSettings({ type: "setOpen", value: true })}
+					onStartStop={handleStartStop}
+					onTogglePreview={() =>
+						setView({ previewAnimation: !view.previewAnimation })
+					}
+					phase={phase}
+					previewAnimation={view.previewAnimation}
+					selected={selected}
+				/>
 			)}
 
-			{screen === "pick" && (
-				<section className="pick-screen">
-					<div className="pick-title">
-						<h1>Choose a character</h1>
-						<p>or keep the current voice personality</p>
-					</div>
-					<div className="carousel-wrap">
-						{canScrollLeft && (
-							<Button
-								variant="ghost"
-								className="button button-ghost carousel-arrow left"
-								onClick={() => scroll("left")}
-								aria-label="Scroll left"
-							>
-								<ChevronLeft />
-							</Button>
-						)}
-						{canScrollLeft && <div className="carousel-fade left" />}
-						{canScrollRight && <div className="carousel-fade right" />}
-						<div
-							ref={scrollRef}
-							className="character-carousel"
-							onScroll={updateScrollButtons}
-						>
-							{characters.map((character) => {
-								const isSelected = selectedId === character.id;
-								return (
-									<button
-										type="button"
-										className="character-option"
-										key={character.id}
-										onClick={() => setSelectedId(character.id)}
-									>
-										<span
-											className={`character-card ${isSelected ? "selected" : ""}`}
-										>
-											<img src={character.image} alt={character.name} />
-											{isSelected && (
-												<span className="selected-check">
-													<Check />
-												</span>
-											)}
-										</span>
-										<span>{character.name}</span>
-									</button>
-								);
-							})}
-						</div>
-						{canScrollRight && (
-							<Button
-								variant="ghost"
-								className="button button-ghost carousel-arrow right"
-								onClick={() => scroll("right")}
-								aria-label="Scroll right"
-							>
-								<ChevronRight />
-							</Button>
-						)}
-					</div>
-					<Button
-						className="button button-primary next-button"
-						onClick={() => {
-							setScreen("welcome");
-							void startChat();
-						}}
-					>
-						Start speaking
-					</Button>
-				</section>
+			{view.screen === "pick" && (
+				<PickScreen
+					canScrollLeft={view.canScrollLeft}
+					canScrollRight={view.canScrollRight}
+					onDone={() => setView({ screen: "welcome" })}
+					onScroll={updateScrollButtons}
+					onScrollBy={scroll}
+					onSelect={(selectedId) => setView({ selectedId })}
+					scrollRef={scrollRef}
+					selectedId={view.selectedId}
+				/>
 			)}
 
-			<Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
-				<DialogContent className="settings-dialog">
-					<DialogHeader className="dialog-header">
-						<DialogTitle>Conversation settings</DialogTitle>
-					</DialogHeader>
-					<label className="field">
-						<span>System prompt</span>
-						<textarea
-							value={systemPrompt}
-							onChange={(event) => setSystemPrompt(event.target.value)}
-						/>
-					</label>
-					<label className="field">
-						<span>Max tokens</span>
-						<input
-							value={maxTokens}
-							onChange={(event) => setMaxTokens(event.target.value)}
-							type="number"
-							min="1"
-							placeholder="blank = no cap"
-						/>
-					</label>
-					<p className="settings-note">
-						<Volume2 /> Character choice appends a voice style prompt; audio
-						uses Supertonic 3.
-					</p>
-				</DialogContent>
-			</Dialog>
+			<SettingsDialog
+				onChange={dispatchSettings}
+				selected={selected}
+				selectedVoicePrompt={selectedVoicePrompt}
+				settings={settings}
+			/>
 		</main>
 	);
 }

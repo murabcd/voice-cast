@@ -6,6 +6,40 @@ import {
 import { requireFile } from "./assertions.mjs";
 import { log } from "./logger.mjs";
 
+export const supertonicLanguages = new Set([
+	"en",
+	"ko",
+	"ja",
+	"ar",
+	"bg",
+	"cs",
+	"da",
+	"de",
+	"el",
+	"es",
+	"et",
+	"fi",
+	"fr",
+	"hi",
+	"hr",
+	"hu",
+	"id",
+	"it",
+	"lt",
+	"lv",
+	"nl",
+	"pl",
+	"pt",
+	"ro",
+	"ru",
+	"sk",
+	"sl",
+	"sv",
+	"tr",
+	"uk",
+	"vi",
+]);
+
 function floatWavToPcm16(wav) {
 	const pcm = Buffer.allocUnsafe(wav.length * 2);
 	for (let i = 0; i < wav.length; i += 1) {
@@ -79,6 +113,9 @@ export class SupertonicTtsWorker {
 		const id = this.nextId++;
 		const started = Date.now();
 		const request = { cancelled: false };
+		const lang = supertonicLanguages.has(callbacks.lang)
+			? callbacks.lang
+			: this.lang;
 		this.pending.set(id, request);
 		callbacks.onStart(this.sampleRate);
 
@@ -86,7 +123,7 @@ export class SupertonicTtsWorker {
 			try {
 				const { wav } = await this.tts.call(
 					clean,
-					this.lang,
+					lang,
 					this.style,
 					this.totalStep,
 					this.speed,
