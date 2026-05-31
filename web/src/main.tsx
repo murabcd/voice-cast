@@ -213,7 +213,14 @@ function App() {
 				sum += centered * centered;
 			}
 			const rms = Math.sqrt(sum / samples.length);
-			const target = Math.min(1, Math.max(0, (rms - 0.01) * 7.5));
+			const fallback =
+				serverPhaseRef.current === "speaking"
+					? 0.08 + Math.sin(performance.now() / 58) * 0.035
+					: 0;
+			const target = Math.max(
+				fallback,
+				Math.min(1, Math.max(0, (rms - 0.003) * 18)),
+			);
 			jawOpenRef.current = jawOpenRef.current * 0.54 + target * 0.46;
 			setJawOpen(jawOpenRef.current);
 			jawRafRef.current = requestAnimationFrame(tick);
@@ -384,6 +391,7 @@ function App() {
 					type: "settings",
 					systemPrompt: `${settings.systemPrompt}\n\nConversation language: ${selectedLanguage.name}. Reply only in ${selectedLanguage.name}.\n\nCharacter voice: ${selectedCharacterPrompt}`,
 					language: selectedLanguage.code,
+					voiceName: selected.voiceName,
 					maxTokens: settings.maxTokens,
 					temperature: settings.temperature,
 					topP: settings.topP,
@@ -423,6 +431,7 @@ function App() {
 		selectedCharacterPrompt,
 		selectedLanguage.code,
 		selectedLanguage.name,
+		selected.voiceName,
 		settings.maxTokens,
 		settings.repeatPenalty,
 		settings.systemPrompt,

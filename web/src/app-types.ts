@@ -31,6 +31,7 @@ export interface Character {
 	id: number;
 	name: string;
 	image: string;
+	voiceName: string;
 	prompts: {
 		en: string;
 		ru: string;

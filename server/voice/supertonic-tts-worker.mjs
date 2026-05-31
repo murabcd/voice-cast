@@ -1,4 +1,4 @@
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import {
 	loadTextToSpeech,
 	loadVoiceStyle,
@@ -38,6 +38,19 @@ export const supertonicLanguages = new Set([
 	"tr",
 	"uk",
 	"vi",
+]);
+
+export const supertonicVoiceNames = new Set([
+	"F1",
+	"F2",
+	"F3",
+	"F4",
+	"F5",
+	"M1",
+	"M2",
+	"M3",
+	"M4",
+	"M5",
 ]);
 
 function floatWavToPcm16(wav) {
@@ -84,6 +97,10 @@ export class SupertonicTtsWorker {
 		requireFile(supertonicVoiceStyle, "Supertonic voice style is missing");
 
 		this.lang = supertonicLang;
+		this.voiceStyleDir = dirname(supertonicVoiceStyle);
+		this.defaultVoiceName =
+			supertonicVoiceStyle.match(/([FM][1-5])\.json$/)?.[1] ?? "M1";
+		this.voiceStyles = new Map();
 		this.totalStep = supertonicTotalStep;
 		this.speed = supertonicSpeed;
 		this.nextId = 1;
@@ -93,13 +110,26 @@ export class SupertonicTtsWorker {
 		this.ready = (async () => {
 			const started = Date.now();
 			this.tts = await loadTextToSpeech(supertonicOnnxDir, false);
-			this.style = loadVoiceStyle([supertonicVoiceStyle]);
+			this.style = this.loadStyle(this.defaultVoiceName);
 			this.sampleRate = this.tts.sampleRate;
 			log(
 				"tts",
 				`supertonic ready sampleRate=${this.sampleRate} voice=${supertonicVoiceStyle} elapsed_ms=${Date.now() - started}`,
 			);
 		})();
+	}
+
+	loadStyle(voiceName) {
+		const normalized = supertonicVoiceNames.has(voiceName)
+			? voiceName
+			: this.defaultVoiceName;
+		const cached = this.voiceStyles.get(normalized);
+		if (cached) return cached;
+		const stylePath = join(this.voiceStyleDir, `${normalized}.json`);
+		requireFile(stylePath, `Supertonic voice style ${normalized} is missing`);
+		const style = loadVoiceStyle([stylePath]);
+		this.voiceStyles.set(normalized, style);
+		return style;
 	}
 
 	speak(text, callbacks) {
@@ -116,6 +146,7 @@ export class SupertonicTtsWorker {
 		const lang = supertonicLanguages.has(callbacks.lang)
 			? callbacks.lang
 			: this.lang;
+		const style = this.loadStyle(callbacks.voiceName);
 		this.pending.set(id, request);
 		callbacks.onStart(this.sampleRate);
 
@@ -124,7 +155,7 @@ export class SupertonicTtsWorker {
 				const { wav } = await this.tts.call(
 					clean,
 					lang,
-					this.style,
+					style,
 					this.totalStep,
 					this.speed,
 					0.08,

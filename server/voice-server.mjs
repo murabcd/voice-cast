@@ -9,6 +9,7 @@ import { SttWorker } from "./voice/stt-worker.mjs";
 import {
 	SupertonicTtsWorker,
 	supertonicLanguages,
+	supertonicVoiceNames,
 } from "./voice/supertonic-tts-worker.mjs";
 import { cleanLlmText, createSentenceChunker } from "./voice/text.mjs";
 import {
@@ -72,6 +73,7 @@ function speakSentence(ws, sentence, turnId) {
 	try {
 		tts.speak(text, {
 			lang: settings.language,
+			voiceName: settings.voiceName,
 			onStart: (sampleRate) => {
 				if (turnId === activeTurnId) {
 					log(
@@ -214,9 +216,13 @@ wss.on("connection", (ws) => {
 			if (msg.type === "settings") {
 				const maxTokens = Number(msg.maxTokens);
 				const language = String(msg.language ?? "").trim();
+				const voiceName = String(msg.voiceName ?? "").trim();
 				clientSettings.set(ws, {
 					systemPrompt: String(msg.systemPrompt ?? "").trim(),
 					language: supertonicLanguages.has(language) ? language : undefined,
+					voiceName: supertonicVoiceNames.has(voiceName)
+						? voiceName
+						: undefined,
 					maxTokens:
 						Number.isInteger(maxTokens) && maxTokens > 0
 							? maxTokens
