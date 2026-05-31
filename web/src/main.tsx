@@ -451,7 +451,7 @@ function App() {
 
 						<ul className="steps" aria-label="Conversation steps">
 							<li className="step active">
-								<b>1</b>Pick a cartoon
+								<b>1</b>Pick a character
 							</li>
 							<ArrowRight aria-hidden="true" />
 							<li className="step">
@@ -465,9 +465,9 @@ function App() {
 
 						<Button
 							className="button button-primary primary-cta"
-							onClick={() => setScreen("pick")}
+							onClick={() => void startChat()}
 						>
-							Get started <ArrowRight />
+							Get started
 						</Button>
 						<div className="secondary-actions">
 							<Button
@@ -555,7 +555,7 @@ function App() {
 							void startChat();
 						}}
 					>
-						Start speaking <ArrowRight />
+						Start speaking
 					</Button>
 				</section>
 			)}

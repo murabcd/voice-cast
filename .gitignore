@@ -3,6 +3,7 @@ web/dist/
 native/voice-stt-worker/target/
 
 models/
+vendor/SadTalker/
 vendor/supertonic/nodejs/node_modules/
 
 .DS_Store

@@ -227,21 +227,26 @@ h1 {
 	align-items: center;
 	justify-content: center;
 	border-radius: 999px;
-	background: rgba(255, 255, 255, 0.94);
+	background: rgba(255, 255, 255, 0.56);
 	color: #000;
 	box-shadow: 0 12px 25px rgba(0, 0, 0, 0.18);
+	backdrop-filter: blur(10px);
 	transition:
+		background 160ms ease,
 		opacity 160ms ease,
 		transform 160ms ease;
 }
 
 .demo-card.is-active .play-button {
-	opacity: 0;
-	transform: translate(-50%, -50%) scale(0.94);
+	opacity: 0.72;
+	transform: translate(-50%, -50%) scale(0.96);
 }
 
+.demo-card:hover .play-button,
+.demo-card:focus-visible .play-button,
 .demo-card.is-active:hover .play-button,
 .demo-card.is-active:focus-visible .play-button {
+	background: rgba(255, 255, 255, 0.94);
 	opacity: 1;
 	transform: translate(-50%, -50%) scale(1);
 }
