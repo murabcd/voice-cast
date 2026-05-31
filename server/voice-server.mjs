@@ -13,6 +13,15 @@ import {
 } from "./voice/supertonic-tts-worker.mjs";
 import { cleanLlmText, createSentenceChunker } from "./voice/text.mjs";
 import {
+	appendReply,
+	canAcceptTurn,
+	createTurn,
+	finishSpeech,
+	isTurnComplete,
+	markLlmDone,
+	queueSpeech,
+} from "./voice/turn-lifecycle.mjs";
+import {
 	sampleRatePayload,
 	sendBinary,
 	sendJson,
@@ -33,6 +42,7 @@ const wss = new WebSocketServer({ server });
 let activeClient;
 let activeAbort;
 let activeTurnId = 0;
+let activeTurn;
 let shuttingDown = false;
 
 const clientSettings = new WeakMap();
@@ -48,6 +58,7 @@ function cancelTurn(reason) {
 	activeTurnId += 1;
 	activeAbort?.abort();
 	activeAbort = undefined;
+	activeTurn = undefined;
 	tts.cancel(reason);
 }
 
@@ -59,54 +70,81 @@ function closeClient(ws, code, reason) {
 	}
 }
 
-function speakSentence(ws, sentence, turnId) {
-	const text = cleanLlmText(sentence);
-	if (!text || turnId !== activeTurnId || ws.readyState !== WebSocket.OPEN)
+function maybeCompleteTurn(turn) {
+	if (
+		turn !== activeTurn ||
+		!isTurnComplete(turn) ||
+		turn.ws.readyState !== WebSocket.OPEN
+	)
 		return;
-	const settings = clientSettings.get(ws) ?? {};
-	sendJson(ws, { type: "state", phase: "speaking" });
+	log(
+		"turn",
+		`done turn=${turn.id} elapsed_ms=${Date.now() - turn.startedAt} chars=${cleanLlmText(turn.reply).length}`,
+	);
+	sendJson(turn.ws, { type: "turn_done", reply: cleanLlmText(turn.reply) });
+	sendJson(turn.ws, { type: "state", phase: "hearing" });
+	activeTurn = undefined;
+}
+
+function speakSentence(turn, sentence) {
+	const text = cleanLlmText(sentence);
+	if (
+		!text ||
+		!canAcceptTurn(activeTurn, turn, activeTurnId) ||
+		turn.ws.readyState !== WebSocket.OPEN
+	)
+		return;
+	const settings = clientSettings.get(turn.ws) ?? {};
 	const queuedAt = Date.now();
+	const speechIndex = queueSpeech(turn);
 	log(
 		"tts",
-		`queue turn=${turnId} chars=${text.length} text=${JSON.stringify(text)}`,
+		`queue turn=${turn.id} speech=${speechIndex} pending=${turn.pendingSpeech} latency_ms=${queuedAt - turn.startedAt} chars=${text.length} text=${JSON.stringify(text)}`,
 	);
 	try {
 		tts.speak(text, {
 			lang: settings.language,
 			voiceName: settings.voiceName,
 			onStart: (sampleRate) => {
-				if (turnId === activeTurnId) {
+				if (canAcceptTurn(activeTurn, turn, activeTurnId)) {
 					log(
 						"tts",
-						`audio_start turn=${turnId} latency_ms=${Date.now() - queuedAt} sampleRate=${sampleRate}`,
+						`audio_start turn=${turn.id} speech=${speechIndex} latency_ms=${Date.now() - queuedAt} turn_latency_ms=${Date.now() - turn.startedAt} sampleRate=${sampleRate}`,
 					);
-					sendBinary(ws, ttsFrameStart, sampleRatePayload(sampleRate));
+					sendJson(turn.ws, { type: "state", phase: "speaking" });
+					sendBinary(turn.ws, ttsFrameStart, sampleRatePayload(sampleRate));
 				}
 			},
 			onAudio: (pcm) => {
-				if (turnId === activeTurnId) sendBinary(ws, ttsFrameAudio, pcm);
+				if (canAcceptTurn(activeTurn, turn, activeTurnId))
+					sendBinary(turn.ws, ttsFrameAudio, pcm);
 			},
 			onDone: () => {
-				if (turnId !== activeTurnId) return;
+				if (!canAcceptTurn(activeTurn, turn, activeTurnId)) return;
+				finishSpeech(turn);
 				log(
 					"tts",
-					`audio_done turn=${turnId} elapsed_ms=${Date.now() - queuedAt}`,
+					`audio_done turn=${turn.id} speech=${speechIndex} pending=${turn.pendingSpeech} elapsed_ms=${Date.now() - queuedAt} turn_latency_ms=${Date.now() - turn.startedAt}`,
 				);
-				sendBinary(ws, ttsFrameDone);
-				sendJson(ws, { type: "state", phase: "hearing" });
+				sendBinary(turn.ws, ttsFrameDone);
+				maybeCompleteTurn(turn);
 			},
 			onError: (message) => {
-				if (turnId === activeTurnId) {
-					sendBinary(ws, ttsFrameError, Buffer.from(message, "utf8"));
-					sendJson(ws, { type: "error", message });
+				if (canAcceptTurn(activeTurn, turn, activeTurnId)) {
+					finishSpeech(turn);
+					sendBinary(turn.ws, ttsFrameError, Buffer.from(message, "utf8"));
+					sendJson(turn.ws, { type: "error", message });
+					maybeCompleteTurn(turn);
 				}
 			},
 		});
 	} catch (error) {
-		sendJson(ws, {
+		finishSpeech(turn);
+		sendJson(turn.ws, {
 			type: "error",
 			message: error instanceof Error ? error.message : String(error),
 		});
+		maybeCompleteTurn(turn);
 	}
 }
 
@@ -116,10 +154,15 @@ async function handleFinal(ws, transcript) {
 	const controller = new AbortController();
 	activeAbort = controller;
 	const chunker = createSentenceChunker();
-	let reply = "";
 	let firstDeltaAt = 0;
 	const startedAt = Date.now();
 	const settings = clientSettings.get(ws) ?? {};
+	const turn = createTurn({
+		id: turnId,
+		startedAt,
+		ws,
+	});
+	activeTurn = turn;
 
 	sendJson(ws, { type: "transcript", text: transcript });
 	sendJson(ws, { type: "state", phase: "thinking" });
@@ -136,7 +179,7 @@ async function handleFinal(ws, transcript) {
 			topP: settings.topP ?? config.llama.topP,
 			repeatPenalty: settings.repeatPenalty ?? config.llama.repeatPenalty,
 		})) {
-			if (turnId !== activeTurnId) return;
+			if (!canAcceptTurn(activeTurn, turn, activeTurnId)) return;
 			if (!firstDeltaAt) {
 				firstDeltaAt = Date.now();
 				log(
@@ -144,24 +187,27 @@ async function handleFinal(ws, transcript) {
 					`first_delta turn=${turnId} latency_ms=${firstDeltaAt - startedAt}`,
 				);
 			}
-			reply += delta;
+			appendReply(turn, delta);
 			sendJson(ws, { type: "reply_delta", text: delta });
-			for (const sentence of chunker.push(delta))
-				speakSentence(ws, sentence, turnId);
+			for (const sentence of chunker.push(delta)) speakSentence(turn, sentence);
 		}
-		if (turnId !== activeTurnId) return;
+		if (!canAcceptTurn(activeTurn, turn, activeTurnId)) return;
 		log(
 			"llm",
-			`done turn=${turnId} elapsed_ms=${Date.now() - startedAt} chars=${cleanLlmText(reply).length}`,
+			`done turn=${turnId} elapsed_ms=${Date.now() - startedAt} chars=${cleanLlmText(turn.reply).length}`,
 		);
-		for (const sentence of chunker.flush()) speakSentence(ws, sentence, turnId);
-		sendJson(ws, { type: "done", reply: cleanLlmText(reply) });
+		for (const sentence of chunker.flush()) speakSentence(turn, sentence);
+		markLlmDone(turn);
+		sendJson(ws, { type: "done", reply: cleanLlmText(turn.reply) });
+		maybeCompleteTurn(turn);
 	} catch (error) {
 		if (error instanceof Error && error.name === "AbortError") return;
+		if (turn === activeTurn) activeTurn = undefined;
 		sendJson(ws, {
 			type: "error",
 			message: error instanceof Error ? error.message : String(error),
 		});
+		sendJson(ws, { type: "state", phase: "hearing" });
 	} finally {
 		if (activeAbort === controller) activeAbort = undefined;
 	}
@@ -182,25 +228,43 @@ wss.on("connection", (ws) => {
 	sendJson(ws, { type: "status", text: "connected" });
 	sendJson(ws, { type: "state", phase: "hearing" });
 
-	const stt = new SttWorker({
-		...config.stt,
-		onEvent: (event) => {
-			sendJson(ws, { type: "stt_event", event });
-			if (event.type === "ready")
-				log(
-					"stt",
-					`ready sampleRate=${event.sampleRate} vadChunkMs=${event.vadChunkMs}`,
-				);
-			if (event.type === "error")
-				sendJson(ws, { type: "error", message: event.message });
-			if (event.type === "final" && event.text?.trim())
-				void handleFinal(ws, event.text.trim());
-		},
-		onExit: ({ stopped }) => {
-			if (!stopped && ws.readyState === WebSocket.OPEN)
-				sendJson(ws, { type: "error", message: "STT worker exited" });
-		},
-	});
+	let sttSessionId = 0;
+	let stt = startSttWorker();
+
+	function startSttWorker() {
+		sttSessionId += 1;
+		const sessionId = sttSessionId;
+		return new SttWorker({
+			...config.stt,
+			onEvent: (event) => {
+				if (sessionId !== sttSessionId) return;
+				sendJson(ws, { type: "stt_event", event });
+				if (event.type === "ready")
+					log(
+						"stt",
+						`ready session=${sessionId} sampleRate=${event.sampleRate} vadChunkMs=${event.vadChunkMs}`,
+					);
+				if (event.type === "error")
+					sendJson(ws, { type: "error", message: event.message });
+				if (event.type === "final" && event.text?.trim())
+					void handleFinal(ws, event.text.trim());
+			},
+			onExit: ({ stopped }) => {
+				if (
+					sessionId === sttSessionId &&
+					!stopped &&
+					ws.readyState === WebSocket.OPEN
+				)
+					sendJson(ws, { type: "error", message: "STT worker exited" });
+			},
+		});
+	}
+
+	function restartSttWorker(reason) {
+		log("stt", `restart reason=${reason}`);
+		stt.stop();
+		stt = startSttWorker();
+	}
 
 	ws.on("message", (data, isBinary) => {
 		try {
@@ -236,6 +300,7 @@ wss.on("connection", (ws) => {
 			if (msg.type === "barge_in") {
 				log("turn", "barge_in");
 				cancelTurn("barge-in");
+				restartSttWorker("barge-in");
 				sendJson(ws, { type: "status", text: "barge-in" });
 				sendJson(ws, { type: "state", phase: "hearing" });
 			}

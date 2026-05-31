@@ -6,6 +6,8 @@ import {
 import { requireFile } from "./assertions.mjs";
 import { log } from "./logger.mjs";
 
+const pcmChunkBytes = 4096;
+
 export const supertonicLanguages = new Set([
 	"en",
 	"ko",
@@ -105,6 +107,7 @@ export class SupertonicTtsWorker {
 		this.speed = supertonicSpeed;
 		this.nextId = 1;
 		this.pending = new Map();
+		this.queue = Promise.resolve();
 		this.closed = false;
 
 		this.ready = (async () => {
@@ -148,41 +151,60 @@ export class SupertonicTtsWorker {
 			: this.lang;
 		const style = this.loadStyle(callbacks.voiceName);
 		this.pending.set(id, request);
-		callbacks.onStart(this.sampleRate);
 
-		void (async () => {
-			try {
-				const { wav } = await this.tts.call(
-					clean,
-					lang,
-					style,
-					this.totalStep,
-					this.speed,
-					0.08,
-				);
-				const current = this.pending.get(id);
-				if (!current || current.cancelled) return;
+		this.queue = this.queue
+			.then(async () => {
+				try {
+					if (request.cancelled || !this.pending.has(id)) return;
+					const { wav } = await this.tts.call(
+						clean,
+						lang,
+						style,
+						this.totalStep,
+						this.speed,
+						0.08,
+					);
+					const current = this.pending.get(id);
+					if (!current || current.cancelled) return;
+					const generatedAt = Date.now();
+					callbacks.onStart(this.sampleRate);
+					log(
+						"tts",
+						`supertonic generated_buffer id=${id} generation_ms=${generatedAt - started} samples=${wav.length}`,
+					);
+					const pcm = floatWavToPcm16(wav);
+					let chunks = 0;
+					for (
+						let offset = 0;
+						offset < pcm.byteLength;
+						offset += pcmChunkBytes
+					) {
+						if (!this.pending.has(id) || request.cancelled) return;
+						callbacks.onAudio(pcm.subarray(offset, offset + pcmChunkBytes));
+						chunks += 1;
+					}
+					this.pending.delete(id);
+					log(
+						"tts",
+						`supertonic audio_sent id=${id} elapsed_ms=${Date.now() - started} chunks=${chunks} bytes=${pcm.byteLength}`,
+					);
+					callbacks.onDone();
+				} catch (error) {
+					if (!this.pending.has(id)) return;
+					this.pending.delete(id);
+					callbacks.onError(
+						error instanceof Error
+							? `Supertonic failed: ${error.message}`
+							: `Supertonic failed: ${String(error)}`,
+					);
+				}
+			})
+			.catch((error) => {
 				log(
 					"tts",
-					`supertonic first_audio id=${id} latency_ms=${Date.now() - started}`,
+					`supertonic queue error: ${error instanceof Error ? error.message : String(error)}`,
 				);
-				callbacks.onAudio(floatWavToPcm16(wav));
-				this.pending.delete(id);
-				log(
-					"tts",
-					`supertonic generated id=${id} elapsed_ms=${Date.now() - started}`,
-				);
-				callbacks.onDone();
-			} catch (error) {
-				if (!this.pending.has(id)) return;
-				this.pending.delete(id);
-				callbacks.onError(
-					error instanceof Error
-						? `Supertonic failed: ${error.message}`
-						: `Supertonic failed: ${String(error)}`,
-				);
-			}
-		})();
+			});
 
 		return id;
 	}

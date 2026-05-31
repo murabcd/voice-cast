@@ -4,12 +4,21 @@ import { Button } from "@/components/ui/button";
 import { characters, languages } from "./app-data";
 import type { Phase, Screen, SettingsAction, SettingsState } from "./app-types";
 import { PickScreen, SettingsDialog, WelcomeScreen } from "./app-ui";
+import {
+	ttsFrameAudio,
+	ttsFrameDone,
+	ttsFrameError,
+	ttsFrameStart,
+} from "./voice-wire";
 import "./styles.css";
 
 const defaultPrompt =
-	"Ты локальный голосовой ассистент для живого разговора. Отвечай на выбранном языке. Отвечай естественно, кратко и по делу. Если фраза пользователя распознана неполно, уточни, что именно он имел в виду. Формулируй ответы так, чтобы они звучали естественно при синтезе речи: используй обычную пунктуацию и избегай латиницы там, где можно сказать на выбранном языке.";
+	"Ты локальный голосовой ассистент для живого разговора. Отвечай на выбранном языке. Отвечай естественно, кратко и по делу. Если фраза пользователя распознана неполно или неясно, задай короткий уточняющий вопрос вместо догадки. Формулируй ответы так, чтобы они звучали естественно при синтезе речи: используй обычную пунктуацию и избегай латиницы там, где можно сказать на выбранном языке.";
 const selectedCharacterKey = "cartoon-voice:selected-character";
 const selectedLanguageKey = "cartoon-voice:selected-language";
+const bargeInFramesRequired = 4;
+const bargeInRmsThreshold = 0.025;
+const bargeInReleaseMs = 450;
 
 interface ViewState {
 	canScrollLeft: boolean;
@@ -163,6 +172,8 @@ function App() {
 	const outputActiveRef = React.useRef(false);
 	const serverPhaseRef = React.useRef<Phase>("idle");
 	const bargeFramesRef = React.useRef(0);
+	const bargeInSentRef = React.useRef(false);
+	const bargeInReleasedUntilRef = React.useRef(0);
 	const scrollRafRef = React.useRef(0);
 	const updateScrollButtonsRef = React.useRef<() => void>(() => undefined);
 
@@ -300,6 +311,9 @@ function App() {
 			micContextRef.current = null;
 			await stopPlayback();
 			serverPhaseRef.current = "idle";
+			bargeFramesRef.current = 0;
+			bargeInSentRef.current = false;
+			bargeInReleasedUntilRef.current = 0;
 			setPhase("idle");
 		},
 		[stopPlayback],
@@ -314,24 +328,31 @@ function App() {
 			let sum = 0;
 			for (const sample of input) sum += sample * sample;
 			const rms = Math.sqrt(sum / input.length);
-
-			if (
+			const assistantActive =
 				outputActiveRef.current ||
 				serverPhaseRef.current === "speaking" ||
-				serverPhaseRef.current === "thinking"
-			) {
-				if (rms > 0.025) {
+				serverPhaseRef.current === "thinking";
+
+			if (assistantActive) {
+				if (rms > bargeInRmsThreshold) {
 					bargeFramesRef.current += 1;
-					if (bargeFramesRef.current >= 4) {
+					if (
+						!bargeInSentRef.current &&
+						bargeFramesRef.current >= bargeInFramesRequired
+					) {
+						bargeInSentRef.current = true;
+						bargeInReleasedUntilRef.current =
+							performance.now() + bargeInReleaseMs;
 						ws.send(JSON.stringify({ type: "barge_in" }));
 						void stopPlayback();
-						bargeFramesRef.current = 0;
 					}
 				} else {
 					bargeFramesRef.current = Math.max(0, bargeFramesRef.current - 1);
 				}
+				if (!bargeInSentRef.current) return;
 			}
 
+			if (performance.now() < bargeInReleasedUntilRef.current) return;
 			ws.send(floatToPcm16(downsampleTo16k(input, micContext.sampleRate)));
 		},
 		[stopPlayback],
@@ -343,7 +364,7 @@ function App() {
 				const bytes = new Uint8Array(event.data);
 				const kind = bytes[0];
 				const payload = bytes.subarray(1);
-				if (kind === 1) {
+				if (kind === ttsFrameStart) {
 					const sampleRate = new DataView(
 						payload.buffer,
 						payload.byteOffset,
@@ -353,11 +374,19 @@ function App() {
 						playbackContextRef.current || new AudioContext({ sampleRate });
 					outputActiveRef.current = true;
 					setPhase("speaking");
-				} else if (kind === 2) {
+				} else if (kind === ttsFrameAudio) {
 					await playPcm(
 						payload,
 						playbackContextRef.current?.sampleRate || 24000,
 					);
+				} else if (kind === ttsFrameDone) {
+					if (!outputActiveRef.current && serverPhaseRef.current !== "thinking")
+						setPhase("hearing");
+				} else if (kind === ttsFrameError) {
+					const message = new TextDecoder().decode(payload);
+					console.error(message);
+					outputActiveRef.current = false;
+					setPhase("hearing");
 				}
 				return;
 			}
@@ -365,14 +394,22 @@ function App() {
 			const msg = JSON.parse(event.data);
 			if (msg.type === "state") {
 				serverPhaseRef.current = msg.phase;
+				if (msg.phase === "thinking" || msg.phase === "speaking") {
+					bargeFramesRef.current = 0;
+					bargeInSentRef.current = false;
+					bargeInReleasedUntilRef.current = 0;
+				}
 				setPhase(
 					outputActiveRef.current && msg.phase === "hearing"
 						? "speaking"
 						: msg.phase,
 				);
 			}
-			if (msg.type === "done") {
+			if (msg.type === "turn_done") {
 				serverPhaseRef.current = "hearing";
+				bargeFramesRef.current = 0;
+				bargeInSentRef.current = false;
+				bargeInReleasedUntilRef.current = 0;
 				if (!outputActiveRef.current) setPhase("hearing");
 			}
 		},
@@ -389,7 +426,7 @@ function App() {
 			ws.send(
 				JSON.stringify({
 					type: "settings",
-					systemPrompt: `${settings.systemPrompt}\n\nConversation language: ${selectedLanguage.name}. Reply only in ${selectedLanguage.name}.\n\nCharacter voice: ${selectedCharacterPrompt}`,
+					systemPrompt: `${settings.systemPrompt}\n\nConversation language: ${selectedLanguage.name}. Reply only in ${selectedLanguage.name}.\n\nCharacter style: ${selectedCharacterPrompt}\nUse the character only for tone, pacing, and manner of speech. Do not introduce character-specific topics, jobs, lore, or examples unless the user asks about them.`,
 					language: selectedLanguage.code,
 					voiceName: selected.voiceName,
 					maxTokens: settings.maxTokens,
@@ -399,6 +436,9 @@ function App() {
 				}),
 			);
 			serverPhaseRef.current = "hearing";
+			bargeFramesRef.current = 0;
+			bargeInSentRef.current = false;
+			bargeInReleasedUntilRef.current = 0;
 			setPhase("hearing");
 			micStreamRef.current = await navigator.mediaDevices.getUserMedia({
 				audio: {
