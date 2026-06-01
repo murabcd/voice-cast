@@ -12,6 +12,14 @@ describe("voice text cleanup", () => {
 		);
 	});
 
+	it("removes markdown links and bare urls from spoken text", () => {
+		expect(
+			cleanLlmText(
+				"1. [Lenta.ru](https://lenta.ru/) сообщает новость. Подробнее: https://example.com/a.",
+			),
+		).toBe("1. Lenta.ru сообщает новость.");
+	});
+
 	it("keeps spoken text complete for TTS", () => {
 		expect(cleanLlmText("Здравствуйте, чем помочь")).toBe(
 			"Здравствуйте, чем помочь.",

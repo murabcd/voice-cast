@@ -1,5 +1,7 @@
 const thinkBlockRe = /<think>[\s\S]*?<\/think>/gi;
 const sentenceRe = /^(.+?[.!?…]+)(\s+|$)/s;
+const markdownLinkRe = /\[([^\]]+)]\((?:https?:\/\/|www\.)[^)\s]+[^)]*\)/gi;
+const bareUrlRe = /\b(?:https?:\/\/|www\.)\S+/gi;
 
 export function cleanLlmText(text) {
 	return finalizeSpokenText(stripLlmArtifacts(text));
@@ -10,11 +12,18 @@ export function stripLlmArtifacts(text) {
 		.replace(thinkBlockRe, "")
 		.replaceAll("<think>", "")
 		.replaceAll("</think>", "")
-		.replaceAll("/no_think", "");
+		.replaceAll("/no_think", "")
+		.replace(markdownLinkRe, "$1")
+		.replace(bareUrlRe, "");
 }
 
 export function finalizeSpokenText(text) {
 	let out = String(text ?? "")
+		.replace(/[`*_#>]+/g, "")
+		.replace(/\((?:\s|,|-)*\)/g, "")
+		.replace(/(?:^|\s)(?:подробнее|источник)\s*:\s*(?=$|\s|[.!?…])/gi, " ")
+		.replace(/[:;,]\s*([.!?…])/g, "$1")
+		.replace(/\s+([.!?…])/g, "$1")
 		.replace(/["“”«»]/g, "")
 		.replace(/\s+/g, " ")
 		.trim();

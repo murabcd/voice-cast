@@ -1,28 +1,68 @@
-import { buildVoiceMessages } from "./assistant-policy.mjs";
+import { buildVoiceMessages } from "../ai/prompts.mjs";
 import { stripLlmArtifacts } from "./text.mjs";
 
 const textDecoder = new TextDecoder();
 
-export async function* streamLlamaReply({
-	url,
-	prompt,
-	signal,
-	systemPrompt,
+function normalizeToolForTemplate(tool) {
+	if (tool?.type === "function") return tool;
+	return {
+		type: "function",
+		function: {
+			name: tool.name,
+			description: tool.description ?? tool.name,
+			parameters: tool.parameters ?? {
+				type: "object",
+				properties: {},
+			},
+		},
+	};
+}
+
+function buildRequestBody({
+	messages,
 	maxTokens,
-	temperature = 0.35,
-	topP = 0.9,
-	repeatPenalty = 1.05,
+	temperature,
+	topP,
+	repeatPenalty,
+	tools,
 }) {
+	const chatTemplateKwargs = { enable_thinking: false };
+	if (tools?.length)
+		chatTemplateKwargs.tools = tools.map((tool) =>
+			normalizeToolForTemplate(tool),
+		);
 	const body = {
 		model: "local",
-		stream: true,
 		temperature,
 		top_p: topP,
 		repeat_penalty: repeatPenalty,
-		chat_template_kwargs: { enable_thinking: false },
-		messages: buildVoiceMessages({ prompt, systemPrompt }),
+		chat_template_kwargs: chatTemplateKwargs,
+		messages,
 	};
 	if (Number.isInteger(maxTokens) && maxTokens > 0) body.max_tokens = maxTokens;
+	return body;
+}
+
+async function fetchLlama({
+	url,
+	signal,
+	messages,
+	maxTokens,
+	temperature,
+	topP,
+	repeatPenalty,
+	tools,
+	stream,
+}) {
+	const body = buildRequestBody({
+		messages,
+		maxTokens,
+		temperature,
+		topP,
+		repeatPenalty,
+		tools,
+	});
+	body.stream = stream;
 	const response = await fetch(url, {
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
@@ -31,7 +71,59 @@ export async function* streamLlamaReply({
 	});
 	if (!response.ok || !response.body)
 		throw new Error(`llama.cpp HTTP ${response.status}`);
+	return response;
+}
 
+export async function completeLlamaReply({
+	url,
+	prompt,
+	signal,
+	systemPrompt,
+	messages = buildVoiceMessages({ prompt, systemPrompt }),
+	maxTokens,
+	temperature = 0.35,
+	topP = 0.9,
+	repeatPenalty = 1.05,
+	tools,
+}) {
+	const response = await fetchLlama({
+		url,
+		signal,
+		messages,
+		maxTokens,
+		temperature,
+		topP,
+		repeatPenalty,
+		tools,
+		stream: false,
+	});
+	const payload = await response.json();
+	return payload.choices?.[0]?.message?.content ?? "";
+}
+
+export async function* streamLlamaReply({
+	url,
+	prompt,
+	signal,
+	systemPrompt,
+	messages = buildVoiceMessages({ prompt, systemPrompt }),
+	maxTokens,
+	temperature = 0.35,
+	topP = 0.9,
+	repeatPenalty = 1.05,
+	tools,
+}) {
+	const response = await fetchLlama({
+		url,
+		signal,
+		messages,
+		maxTokens,
+		temperature,
+		topP,
+		repeatPenalty,
+		tools,
+		stream: true,
+	});
 	const reader = response.body.getReader();
 	let buffer = "";
 	while (true) {

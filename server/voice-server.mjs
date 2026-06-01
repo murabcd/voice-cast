@@ -1,9 +1,13 @@
 #!/usr/bin/env node
 import { mkdir } from "node:fs/promises";
 import WebSocket, { WebSocketServer } from "ws";
+import { OllamaWebTools } from "./ai/tools/ollama-web-tools.mjs";
 import { config } from "./voice/config.mjs";
 import { streamLlamaReply } from "./voice/llama.mjs";
 import { log } from "./voice/logger.mjs";
+import { shouldWaitForUser } from "./voice/realtime-voice-patterns.mjs";
+import { planReply } from "./voice/reply-planner.mjs";
+import { normalizeRussianSpeechText } from "./voice/speech-normalization.mjs";
 import { createStaticServer } from "./voice/static-server.mjs";
 import { SttWorker } from "./voice/stt-worker.mjs";
 import {
@@ -21,6 +25,7 @@ import {
 	markLlmDone,
 	queueSpeech,
 } from "./voice/turn-lifecycle.mjs";
+import { normalizeWebToolsEnabled } from "./voice/web-intent.mjs";
 import {
 	sampleRatePayload,
 	sendBinary,
@@ -35,6 +40,20 @@ await mkdir(config.logDir, { recursive: true });
 
 const tts = new SupertonicTtsWorker(config.tts);
 await tts.ready;
+
+const webTools = new OllamaWebTools({
+	apiKey: config.webTools.ollamaApiKey,
+	maxSearchResults: config.webTools.maxSearchResults,
+	maxSearchResultContentChars: config.webTools.maxSearchResultContentChars,
+	maxFetchContentChars: config.webTools.maxFetchContentChars,
+	maxFetchLinks: config.webTools.maxFetchLinks,
+});
+log(
+	"tool",
+	webTools.enabled
+		? `ollama web tools enabled tools=${webTools.tools.length}`
+		: "ollama web tools disabled: OLLAMA_API_KEY is not configured",
+);
 
 const server = createStaticServer(config);
 const wss = new WebSocketServer({ server });
@@ -65,9 +84,7 @@ function cancelTurn(reason) {
 function closeClient(ws, code, reason) {
 	try {
 		ws.close(code, reason);
-	} catch {
-		// Socket may already be closed.
-	}
+	} catch {}
 }
 
 function maybeCompleteTurn(turn) {
@@ -88,8 +105,10 @@ function maybeCompleteTurn(turn) {
 
 function speakSentence(turn, sentence) {
 	const text = cleanLlmText(sentence);
+	const spokenText = normalizeRussianSpeechText(text);
 	if (
 		!text ||
+		!spokenText ||
 		!canAcceptTurn(activeTurn, turn, activeTurnId) ||
 		turn.ws.readyState !== WebSocket.OPEN
 	)
@@ -99,10 +118,10 @@ function speakSentence(turn, sentence) {
 	const speechIndex = queueSpeech(turn);
 	log(
 		"tts",
-		`queue turn=${turn.id} speech=${speechIndex} pending=${turn.pendingSpeech} latency_ms=${queuedAt - turn.startedAt} chars=${text.length} text=${JSON.stringify(text)}`,
+		`queue turn=${turn.id} speech=${speechIndex} pending=${turn.pendingSpeech} latency_ms=${queuedAt - turn.startedAt} chars=${text.length} text=${JSON.stringify(text)} spoken=${JSON.stringify(spokenText)}`,
 	);
 	try {
-		tts.speak(text, {
+		tts.speak(spokenText, {
 			lang: settings.language,
 			voiceName: settings.voiceName,
 			onStart: (sampleRate) => {
@@ -149,6 +168,16 @@ function speakSentence(turn, sentence) {
 }
 
 async function handleFinal(ws, transcript) {
+	const normalizedTranscript = String(transcript ?? "").trim();
+	if (shouldWaitForUser(normalizedTranscript)) {
+		log(
+			"turn",
+			`wait_for_user transcript=${JSON.stringify(normalizedTranscript)}`,
+		);
+		sendJson(ws, { type: "transcript", text: normalizedTranscript });
+		sendJson(ws, { type: "state", phase: "hearing" });
+		return;
+	}
 	cancelTurn("new final");
 	const turnId = activeTurnId;
 	const controller = new AbortController();
@@ -164,16 +193,33 @@ async function handleFinal(ws, transcript) {
 	});
 	activeTurn = turn;
 
-	sendJson(ws, { type: "transcript", text: transcript });
+	sendJson(ws, { type: "transcript", text: normalizedTranscript });
 	sendJson(ws, { type: "state", phase: "thinking" });
-	log("turn", `start turn=${turnId} transcript=${JSON.stringify(transcript)}`);
+	log(
+		"turn",
+		`start turn=${turnId} transcript=${JSON.stringify(normalizedTranscript)}`,
+	);
 
 	try {
+		const messages = await planReply({
+			config,
+			prompt: normalizedTranscript,
+			settings,
+			signal: controller.signal,
+			toolManager: webTools,
+			turnId,
+			onPreamble: (sentence) => speakSentence(turn, sentence),
+			onToolActivity: ({ active, name }) => {
+				if (!canAcceptTurn(activeTurn, turn, activeTurnId)) return;
+				sendJson(ws, { type: "web_search", active, name });
+			},
+		});
 		for await (const delta of streamLlamaReply({
 			url: config.llamaUrl,
-			prompt: transcript,
+			prompt: normalizedTranscript,
 			signal: controller.signal,
 			systemPrompt: settings.systemPrompt,
+			messages,
 			maxTokens: settings.maxTokens ?? config.llama.maxTokens,
 			temperature: settings.temperature ?? config.llama.temperature,
 			topP: settings.topP ?? config.llama.topP,
@@ -203,6 +249,7 @@ async function handleFinal(ws, transcript) {
 	} catch (error) {
 		if (error instanceof Error && error.name === "AbortError") return;
 		if (turn === activeTurn) activeTurn = undefined;
+		sendJson(ws, { type: "web_search", active: false });
 		sendJson(ws, {
 			type: "error",
 			message: error instanceof Error ? error.message : String(error),
@@ -266,7 +313,7 @@ wss.on("connection", (ws) => {
 		stt = startSttWorker();
 	}
 
-	ws.on("message", (data, isBinary) => {
+	ws.on("message", async (data, isBinary) => {
 		try {
 			if (isBinary) {
 				const ok = stt.pushPcm(
@@ -294,6 +341,7 @@ wss.on("connection", (ws) => {
 					temperature: parseNumber(msg.temperature, { min: 0, max: 2 }),
 					topP: parseNumber(msg.topP, { min: 0, max: 1 }),
 					repeatPenalty: parseNumber(msg.repeatPenalty, { min: 1, max: 2 }),
+					webToolsEnabled: normalizeWebToolsEnabled(msg.webToolsEnabled),
 				});
 				return;
 			}

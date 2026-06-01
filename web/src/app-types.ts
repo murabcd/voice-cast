@@ -9,6 +9,7 @@ export interface SettingsState {
 	temperature: string;
 	topP: string;
 	repeatPenalty: string;
+	webToolsEnabled: boolean;
 	advancedOpen: boolean;
 }
 
@@ -20,6 +21,7 @@ export type SettingsAction =
 	| { type: "setTemperature"; value: string }
 	| { type: "setTopP"; value: string }
 	| { type: "setRepeatPenalty"; value: string }
+	| { type: "setWebToolsEnabled"; value: boolean }
 	| { type: "setAdvancedOpen"; value: boolean };
 
 export interface LanguageOption {
