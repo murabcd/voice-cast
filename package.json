@@ -10,6 +10,7 @@
 		"dev:web": "vite --host 127.0.0.1 --port 3000 --strictPort",
 		"dev:voice": "node server/voice-server.mjs",
 		"dev:llm": "scripts/run_llama_server.sh",
+		"demo:tunnel": "cloudflared tunnel --url http://127.0.0.1:3000",
 		"build": "vite build",
 		"llm:smollm": "MODEL=models/llm/smollm3-3b/HuggingFaceTB_SmolLM3-3B-Q4_K_M.gguf scripts/run_llama_server.sh",
 		"check:voice": "node --check server/voice-server.mjs && for f in server/voice/*.mjs; do node --check \"$f\" || exit 1; done",

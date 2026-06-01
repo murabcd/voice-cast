@@ -1,8 +1,20 @@
-# Cast
+<a href="#cast">
+  <img alt="Local speech-to-speech voice app for talking with cartoon characters." src="./web/public/cast.png">
+  <h1 align="center">Cast</h1>
+</a>
 
-Local Russian speech-to-speech voice app for Apple Silicon.
+<p align="center">
+  Local speech-to-speech voice app for talking with cartoon characters.
+</p>
 
-Cast runs the complete conversation loop on your machine: browser microphone input, native speech recognition, local LLM replies, and local speech synthesis.
+<p align="center">
+  <a href="#features"><strong>Features</strong></a> ·
+  <a href="#runtime"><strong>Runtime</strong></a> ·
+  <a href="#models"><strong>Models</strong></a> ·
+  <a href="#running-locally"><strong>Running locally</strong></a> ·
+  <a href="#demo"><strong>Demo</strong></a>
+</p>
+<br/>
 
 ## Features
 
@@ -47,6 +59,31 @@ http://localhost:3000
 - Node voice WebSocket server on `127.0.0.1:8090`
 - llama.cpp server on `127.0.0.1:18081`
 
+## Demo
+
+Use this when you want to keep the full voice runtime on your Mac and share a temporary HTTPS URL.
+
+Terminal 1:
+
+```bash
+bun run dev
+```
+
+Terminal 2:
+
+```bash
+bun run demo:tunnel
+```
+
+Cloudflare prints a temporary `https://...trycloudflare.com` URL. The browser will use the secure tunnel for microphone access, while STT, LLM, and TTS continue running locally on your machine.
+
+Notes:
+
+- Install `cloudflared` first if needed: `brew install cloudflared`.
+- Keep both terminal processes running for the whole demo.
+- The current voice server accepts one active client at a time.
+- Stop the tunnel with `Ctrl+C` when the demo is finished.
+
 ## Commands
 
 | Command | Description |
@@ -55,6 +92,7 @@ http://localhost:3000
 | `bun run dev:web` | Start only the Vite web app. |
 | `bun run dev:voice` | Start only the Node voice server. |
 | `bun run dev:llm` | Start only the llama.cpp server. |
+| `bun run demo:tunnel` | Expose the local Vite app through a temporary Cloudflare Tunnel URL. |
 | `bun run check` | Run Biome, TypeScript, Node syntax checks, and tests. |
 | `bun run build` | Build the web app. |
 
