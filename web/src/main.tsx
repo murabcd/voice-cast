@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { Button } from "@/components/ui/button";
 import { characters, languages } from "./app-data";
 import type { Screen, SettingsAction, SettingsState } from "./app-types";
+import "./avatar-animation.css";
 import { PickScreen } from "./pick-screen";
 import { SettingsDialog } from "./settings-dialog";
 import "./styles.css";
@@ -194,8 +195,10 @@ function App() {
 			{view.screen === "welcome" && (
 				<WelcomeScreen
 					active={voiceSession.active}
+					avatarIsListening={voiceSession.avatarIsListening}
 					avatarIsSpeaking={voiceSession.avatarIsSpeaking}
 					jawOpen={voiceSession.jawOpen}
+					listeningEnergy={voiceSession.listeningEnergy}
 					onCharacter={() => setView({ screen: "pick" })}
 					onSettings={() => dispatchSettings({ type: "setOpen", value: true })}
 					onStartStop={voiceSession.handleStartStop}

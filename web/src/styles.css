@@ -213,68 +213,11 @@ h1 {
 	cursor: pointer;
 }
 
-.avatar-stage {
-	position: absolute;
-	inset: 0;
-	display: block;
-	overflow: hidden;
-	transform-origin: 50% 58%;
-}
-
-.avatar-stage img,
 .character-card img {
 	width: 100%;
 	height: 100%;
 	object-fit: cover;
 	object-position: center top;
-}
-
-.demo-card.is-speaking .avatar-stage {
-	animation: avatar-idle 3.6s ease-in-out infinite;
-}
-
-.avatar-jaw {
-	position: absolute;
-	top: var(--jaw-y);
-	left: var(--jaw-x);
-	z-index: 1;
-	width: var(--jaw-width);
-	height: var(--jaw-height);
-	transform-origin: 50% 22%;
-	pointer-events: none;
-	overflow: hidden;
-	border-radius: 0 0 48% 48%;
-	opacity: calc(var(--jaw-open, 0) * 1);
-	transform: translate3d(0, calc(var(--jaw-open, 0) * min(10px, 4.2%)), 0);
-	filter: saturate(1.03);
-}
-
-.avatar-jaw img {
-	position: absolute;
-	top: var(--jaw-img-top);
-	left: var(--jaw-img-left);
-	width: var(--jaw-img-width);
-	height: var(--jaw-img-height);
-	max-width: none;
-	object-fit: cover;
-	object-position: center top;
-}
-
-.avatar-breath {
-	position: absolute;
-	inset: 0;
-	background: radial-gradient(
-		circle at 50% 52%,
-		rgba(255, 255, 255, 0.08),
-		rgba(255, 255, 255, 0) 34%
-	);
-	opacity: 0;
-	pointer-events: none;
-	mix-blend-mode: soft-light;
-}
-
-.demo-card.is-speaking .avatar-breath {
-	animation: avatar-breath 1.9s ease-in-out infinite;
 }
 
 .web-search-indicator {
@@ -308,29 +251,6 @@ h1 {
 	position: absolute;
 	inset: 0;
 	background: rgba(0, 0, 0, 0.18);
-}
-
-@keyframes avatar-idle {
-	0%,
-	100% {
-		transform: translate3d(0, 0, 0) scale(1.012) rotate(0deg);
-	}
-	38% {
-		transform: translate3d(0.25%, -0.5%, 0) scale(1.018) rotate(0.18deg);
-	}
-	70% {
-		transform: translate3d(-0.22%, 0.26%, 0) scale(1.014) rotate(-0.12deg);
-	}
-}
-
-@keyframes avatar-breath {
-	0%,
-	100% {
-		opacity: 0.03;
-	}
-	45% {
-		opacity: 0.14;
-	}
 }
 
 @keyframes web-search-pulse {

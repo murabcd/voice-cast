@@ -5,8 +5,10 @@ import type { Character, Phase } from "./app-types";
 
 interface WelcomeScreenProps {
 	active: boolean;
+	avatarIsListening: boolean;
 	avatarIsSpeaking: boolean;
 	jawOpen: number;
+	listeningEnergy: number;
 	onCharacter: () => void;
 	onSettings: () => void;
 	onStartStop: () => void;
@@ -19,8 +21,10 @@ interface WelcomeScreenProps {
 
 export function WelcomeScreen({
 	active,
+	avatarIsListening,
 	avatarIsSpeaking,
 	jawOpen,
+	listeningEnergy,
 	onCharacter,
 	onSettings,
 	onStartStop,
@@ -39,7 +43,7 @@ export function WelcomeScreen({
 				<Button
 					type="button"
 					variant="ghost"
-					className={`demo-card ${active || previewAnimation ? "is-active" : ""} ${previewAnimation ? "is-previewing" : ""} ${avatarIsSpeaking ? "is-speaking" : ""}`}
+					className={`demo-card ${active || previewAnimation ? "is-active" : ""} ${previewAnimation ? "is-previewing" : ""} ${avatarIsSpeaking ? "is-speaking" : ""} ${avatarIsListening ? "is-listening" : ""}`}
 					onClick={onStartStop}
 					aria-label={active ? "Stop conversation" : "Start conversation"}
 				>
@@ -56,6 +60,7 @@ export function WelcomeScreen({
 								"--jaw-img-height": `${10000 / selected.jaw.height}%`,
 								"--jaw-img-left": `${(-selected.jaw.x / selected.jaw.width) * 100}%`,
 								"--jaw-img-top": `${(-selected.jaw.y / selected.jaw.height) * 100}%`,
+								"--listen-energy": listeningEnergy,
 							} as React.CSSProperties
 						}
 					>

@@ -5,6 +5,7 @@ import type {
 	Phase,
 	SettingsState,
 } from "./app-types";
+import { useAvatarAnimation } from "./use-avatar-animation";
 import { castAgent } from "./voice-agent-config";
 import {
 	ttsFrameAudio,
@@ -74,8 +75,16 @@ export function useVoiceSession({
 }: UseVoiceSessionOptions) {
 	const [phase, setPhase] = React.useState<Phase>("idle");
 	const [active, setActive] = React.useState(false);
-	const [jawOpen, setJawOpen] = React.useState(0);
 	const [webSearchActive, setWebSearchActive] = React.useState(false);
+	const [playbackAnalyser, setPlaybackAnalyser] =
+		React.useState<AnalyserNode | null>(null);
+	const {
+		avatarIsListening,
+		avatarIsSpeaking,
+		jawOpen,
+		listeningEnergy,
+		updateListeningMeter,
+	} = useAvatarAnimation({ phase, playbackAnalyser, previewAnimation });
 	const sttReadyRef = React.useRef(false);
 	const wsRef = React.useRef<WebSocket | null>(null);
 	const micStreamRef = React.useRef<MediaStream | null>(null);
@@ -87,8 +96,6 @@ export function useVoiceSession({
 		null,
 	);
 	const playbackAnalyserRef = React.useRef<AnalyserNode | null>(null);
-	const jawRafRef = React.useRef(0);
-	const jawOpenRef = React.useRef(0);
 	const outputActiveRef = React.useRef(false);
 	const serverPhaseRef = React.useRef<Phase>("idle");
 	const bargeFramesRef = React.useRef(0);
@@ -97,13 +104,8 @@ export function useVoiceSession({
 
 	const stopPlayback = React.useCallback(async () => {
 		outputActiveRef.current = false;
-		if (jawRafRef.current) {
-			cancelAnimationFrame(jawRafRef.current);
-			jawRafRef.current = 0;
-		}
+		setPlaybackAnalyser(null);
 		playbackAnalyserRef.current = null;
-		jawOpenRef.current = 0;
-		setJawOpen(0);
 		const playbackSources = getPlaybackSources(playbackSourcesRef);
 		for (const source of playbackSources) {
 			try {
@@ -119,40 +121,6 @@ export function useVoiceSession({
 			await playbackContextRef.current.close().catch(() => undefined);
 		}
 		playbackContextRef.current = null;
-	}, []);
-
-	const startJawMeter = React.useCallback(() => {
-		if (jawRafRef.current) return;
-		const tick = () => {
-			const analyser = playbackAnalyserRef.current;
-			if (!outputActiveRef.current || !analyser) {
-				jawRafRef.current = 0;
-				jawOpenRef.current *= 0.65;
-				setJawOpen(jawOpenRef.current < 0.02 ? 0 : jawOpenRef.current);
-				return;
-			}
-
-			const samples = new Uint8Array(analyser.fftSize);
-			analyser.getByteTimeDomainData(samples);
-			let sum = 0;
-			for (const sample of samples) {
-				const centered = (sample - 128) / 128;
-				sum += centered * centered;
-			}
-			const rms = Math.sqrt(sum / samples.length);
-			const fallback =
-				serverPhaseRef.current === "speaking"
-					? 0.08 + Math.sin(performance.now() / 58) * 0.035
-					: 0;
-			const target = Math.max(
-				fallback,
-				Math.min(1, Math.max(0, (rms - 0.003) * 18)),
-			);
-			jawOpenRef.current = jawOpenRef.current * 0.54 + target * 0.46;
-			setJawOpen(jawOpenRef.current);
-			jawRafRef.current = requestAnimationFrame(tick);
-		};
-		jawRafRef.current = requestAnimationFrame(tick);
 	}, []);
 
 	const playPcm = React.useCallback(
@@ -175,6 +143,7 @@ export function useVoiceSession({
 				playbackAnalyserRef.current.connect(
 					playbackContextRef.current.destination,
 				);
+				setPlaybackAnalyser(playbackAnalyserRef.current);
 			}
 			if (playbackContextRef.current.state === "suspended")
 				await playbackContextRef.current.resume();
@@ -190,13 +159,11 @@ export function useVoiceSession({
 			source.connect(playbackAnalyserRef.current);
 			const playbackSources = getPlaybackSources(playbackSourcesRef);
 			playbackSources.add(source);
-			startJawMeter();
 			source.onended = () => {
 				playbackSources.delete(source);
 				if (playbackSources.size === 0) {
 					outputActiveRef.current = false;
-					jawOpenRef.current = 0;
-					setJawOpen(0);
+					setPlaybackAnalyser(null);
 					setPhase(
 						serverPhaseRef.current === "thinking" ? "thinking" : "hearing",
 					);
@@ -209,7 +176,7 @@ export function useVoiceSession({
 			source.start(startAt);
 			playbackCursorRef.current = startAt + buffer.duration;
 		},
-		[startJawMeter],
+		[],
 	);
 
 	const stopChat = React.useCallback(
@@ -252,6 +219,7 @@ export function useVoiceSession({
 			let sum = 0;
 			for (const sample of input) sum += sample * sample;
 			const rms = Math.sqrt(sum / input.length);
+			updateListeningMeter(rms);
 			const assistantActive =
 				outputActiveRef.current ||
 				serverPhaseRef.current === "speaking" ||
@@ -279,7 +247,7 @@ export function useVoiceSession({
 			if (performance.now() < bargeInReleasedUntilRef.current) return;
 			ws.send(floatToPcm16(downsampleTo16k(input, micContext.sampleRate)));
 		},
-		[stopPlayback],
+		[stopPlayback, updateListeningMeter],
 	);
 
 	const handleServerMessage = React.useCallback(
@@ -310,6 +278,7 @@ export function useVoiceSession({
 					const message = new TextDecoder().decode(payload);
 					console.error(message);
 					outputActiveRef.current = false;
+					setPlaybackAnalyser(null);
 					setPhase("hearing");
 				}
 				return;
@@ -426,30 +395,13 @@ export function useVoiceSession({
 
 	React.useEffect(() => () => void stopChat(), [stopChat]);
 
-	React.useEffect(() => {
-		if (!previewAnimation) return;
-		let raf = 0;
-		const startedAt = performance.now();
-		const tick = (now: number) => {
-			const elapsed = (now - startedAt) / 1000;
-			const pulse =
-				Math.max(0, Math.sin(elapsed * 12)) * 0.68 +
-				Math.max(0, Math.sin(elapsed * 21)) * 0.32;
-			setJawOpen(pulse);
-			raf = requestAnimationFrame(tick);
-		};
-		raf = requestAnimationFrame(tick);
-		return () => {
-			cancelAnimationFrame(raf);
-			setJawOpen(0);
-		};
-	}, [previewAnimation]);
-
 	return {
 		active,
-		avatarIsSpeaking: phase === "speaking" || previewAnimation,
+		avatarIsListening,
+		avatarIsSpeaking,
 		handleStartStop: () => (active ? void stopChat() : void startChat()),
 		jawOpen,
+		listeningEnergy,
 		phase,
 		webSearchActive,
 	};
