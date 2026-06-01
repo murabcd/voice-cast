@@ -3,7 +3,7 @@
   "configVersion": 0,
   "workspaces": {
     "": {
-      "name": "cartoon-voice",
+      "name": "cast",
       "dependencies": {
         "@fontsource-variable/geist": "^5.2.9",
         "class-variance-authority": "^0.7.1",

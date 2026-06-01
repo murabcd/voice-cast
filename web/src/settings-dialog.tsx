@@ -30,7 +30,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { languages } from "./app-data";
 import type { Character, SettingsAction, SettingsState } from "./app-types";
-import { cartoonVoiceAgent } from "./voice-agent-config";
+import { castAgent } from "./voice-agent-config";
 
 interface SettingsDialogProps {
 	onChange: React.Dispatch<SettingsAction>;
@@ -77,7 +77,7 @@ export function SettingsDialog({
 								onChange({
 									type: "setLanguageCode",
 									value,
-									defaultPrompt: cartoonVoiceAgent.defaultInstructions(value),
+									defaultPrompt: castAgent.defaultInstructions(value),
 								})
 							}
 						>

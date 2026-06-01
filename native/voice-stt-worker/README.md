@@ -1,6 +1,6 @@
 # Voice STT worker
 
-Native speech-to-text worker for Cartoon Voice.
+Native speech-to-text worker for Cast.
 
 It reads length-prefixed 16-bit little-endian mono PCM frames from stdin and emits newline-delimited JSON events for speech activity and finalized transcripts.
 

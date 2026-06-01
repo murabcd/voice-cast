@@ -5,7 +5,7 @@ import type {
 	Phase,
 	SettingsState,
 } from "./app-types";
-import { cartoonVoiceAgent } from "./voice-agent-config";
+import { castAgent } from "./voice-agent-config";
 import {
 	ttsFrameAudio,
 	ttsFrameDone,
@@ -364,7 +364,7 @@ export function useVoiceSession({
 			ws.send(
 				JSON.stringify({
 					type: "settings",
-					systemPrompt: cartoonVoiceAgent.buildRuntimeInstructions({
+					systemPrompt: castAgent.buildRuntimeInstructions({
 						baseInstructions: settings.systemPrompt,
 						languageName: selectedLanguage.name,
 						characterInstructions: selectedCharacterPrompt,

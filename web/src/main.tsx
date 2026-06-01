@@ -7,11 +7,11 @@ import { PickScreen } from "./pick-screen";
 import { SettingsDialog } from "./settings-dialog";
 import "./styles.css";
 import { useVoiceSession } from "./use-voice-session";
-import { cartoonVoiceAgent } from "./voice-agent-config";
+import { castAgent } from "./voice-agent-config";
 import { WelcomeScreen } from "./welcome-screen";
 
-const selectedCharacterKey = "cartoon-voice:selected-character";
-const selectedLanguageKey = "cartoon-voice:selected-language";
+const selectedCharacterKey = "cast:selected-character";
+const selectedLanguageKey = "cast:selected-language";
 
 interface ViewState {
 	canScrollLeft: boolean;
@@ -99,7 +99,7 @@ function App() {
 	const [settings, dispatchSettings] = React.useReducer(settingsReducer, {
 		open: false,
 		languageCode: initialLanguageCode,
-		systemPrompt: cartoonVoiceAgent.defaultInstructions(initialLanguageCode),
+		systemPrompt: castAgent.defaultInstructions(initialLanguageCode),
 		systemPromptEdited: false,
 		maxTokens: "512",
 		temperature: "0.35",
@@ -188,7 +188,7 @@ function App() {
 				className="brand"
 				onClick={() => setView({ screen: "welcome" })}
 			>
-				<span>Cartoon Voice</span>
+				<span>Cast</span>
 			</Button>
 
 			{view.screen === "welcome" && (

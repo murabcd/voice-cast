@@ -1,8 +1,8 @@
-# Cartoon Voice
+# Cast
 
 Local Russian speech-to-speech voice app for Apple Silicon.
 
-Cartoon Voice runs the complete conversation loop on your machine: browser microphone input, native speech recognition, local LLM replies, and local speech synthesis.
+Cast runs the complete conversation loop on your machine: browser microphone input, native speech recognition, local LLM replies, and local speech synthesis.
 
 ## Features
 

@@ -1,6 +1,6 @@
 # Architecture
 
-Cartoon Voice is a local speech-to-speech app with one maintained runtime path.
+Cast is a local speech-to-speech app with one maintained runtime path.
 
 ## Runtime Flow
 

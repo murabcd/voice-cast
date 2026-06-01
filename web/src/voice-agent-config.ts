@@ -56,10 +56,10 @@ function buildRuntimeInstructions({
 	].join("\n");
 }
 
-export const cartoonVoiceAgent: VoiceAgentConfig = {
-	name: "cartoon_voice",
+export const castAgent: VoiceAgentConfig = {
+	name: "cast",
 	publicDescription:
-		"Local speech-to-speech cartoon voice assistant with optional read-only web tools.",
+		"Local speech-to-speech assistant for talking with cartoon characters, with optional read-only web tools.",
 	defaultInstructions,
 	buildRuntimeInstructions,
 };
