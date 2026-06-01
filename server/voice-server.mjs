@@ -2,20 +2,28 @@
 import { mkdir } from "node:fs/promises";
 import WebSocket, { WebSocketServer } from "ws";
 import { OllamaWebTools } from "./ai/tools/ollama-web-tools.mjs";
+import { parseClientSettingsMessage } from "./voice/client-settings.mjs";
 import { config } from "./voice/config.mjs";
 import { streamLlamaReply } from "./voice/llama.mjs";
-import { log } from "./voice/logger.mjs";
-import { shouldWaitForUser } from "./voice/realtime-voice-patterns.mjs";
+import { log, logError } from "./voice/logger.mjs";
+import {
+	shouldClarifyRussianTranscript,
+	shouldWaitForUser,
+} from "./voice/realtime-voice-patterns.mjs";
 import { planReply } from "./voice/reply-planner.mjs";
+import {
+	createSessionHistory,
+	isRepeatLastAnswerRequest,
+} from "./voice/session-history.mjs";
 import { normalizeRussianSpeechText } from "./voice/speech-normalization.mjs";
 import { createStaticServer } from "./voice/static-server.mjs";
 import { SttWorker } from "./voice/stt-worker.mjs";
-import {
-	SupertonicTtsWorker,
-	supertonicLanguages,
-	supertonicVoiceNames,
-} from "./voice/supertonic-tts-worker.mjs";
+import { SupertonicTtsWorker } from "./voice/supertonic-tts-worker.mjs";
 import { cleanLlmText, createSentenceChunker } from "./voice/text.mjs";
+import {
+	createToolActivityHandler,
+	resetToolActivity,
+} from "./voice/tool-activity.mjs";
 import {
 	appendReply,
 	canAcceptTurn,
@@ -25,7 +33,15 @@ import {
 	markLlmDone,
 	queueSpeech,
 } from "./voice/turn-lifecycle.mjs";
-import { normalizeWebToolsEnabled } from "./voice/web-intent.mjs";
+import {
+	createTurnLog,
+	emitIgnoredTurnLog,
+	emitTurnLog,
+	recordFirstTtsAudio,
+	recordQueuedSpeech,
+	recordToolCall,
+	recordToolPreamble,
+} from "./voice/turn-logging.mjs";
 import {
 	sampleRatePayload,
 	sendBinary,
@@ -65,15 +81,20 @@ let activeTurn;
 let shuttingDown = false;
 
 const clientSettings = new WeakMap();
-
-function parseNumber(value, { min, max }) {
-	const parsed = Number(value);
-	if (!Number.isFinite(parsed)) return undefined;
-	if (parsed < min || parsed > max) return undefined;
-	return parsed;
-}
+const clientHistory = new WeakMap();
 
 function cancelTurn(reason) {
+	if (activeTurn) {
+		if (activeTurn.ws.readyState === WebSocket.OPEN)
+			resetToolActivity({
+				turn: activeTurn,
+				sendToolState: (state) =>
+					sendJson(activeTurn.ws, { type: "web_search", ...state }),
+			});
+		emitTurnLog(activeTurn, "cancelled", {
+			cancel_reason: reason,
+		});
+	}
 	activeTurnId += 1;
 	activeAbort?.abort();
 	activeAbort = undefined;
@@ -98,6 +119,16 @@ function maybeCompleteTurn(turn) {
 		"turn",
 		`done turn=${turn.id} elapsed_ms=${Date.now() - turn.startedAt} chars=${cleanLlmText(turn.reply).length}`,
 	);
+	emitTurnLog(turn, "success");
+	resetToolActivity({
+		turn,
+		sendToolState: (state) =>
+			sendJson(turn.ws, { type: "web_search", ...state }),
+	});
+	clientHistory.get(turn.ws)?.add({
+		user: turn.userTranscript,
+		assistant: cleanLlmText(turn.reply),
+	});
 	sendJson(turn.ws, { type: "turn_done", reply: cleanLlmText(turn.reply) });
 	sendJson(turn.ws, { type: "state", phase: "hearing" });
 	activeTurn = undefined;
@@ -105,7 +136,9 @@ function maybeCompleteTurn(turn) {
 
 function speakSentence(turn, sentence) {
 	const text = cleanLlmText(sentence);
-	const spokenText = normalizeRussianSpeechText(text);
+	const settings = clientSettings.get(turn.ws) ?? {};
+	const spokenText =
+		settings.language === "ru" ? normalizeRussianSpeechText(text) : text;
 	if (
 		!text ||
 		!spokenText ||
@@ -113,12 +146,18 @@ function speakSentence(turn, sentence) {
 		turn.ws.readyState !== WebSocket.OPEN
 	)
 		return;
-	const settings = clientSettings.get(turn.ws) ?? {};
 	const queuedAt = Date.now();
 	const speechIndex = queueSpeech(turn);
+	recordQueuedSpeech({
+		turn,
+		text,
+		spokenText,
+		queuedAt,
+		speechIndex,
+	});
 	log(
 		"tts",
-		`queue turn=${turn.id} speech=${speechIndex} pending=${turn.pendingSpeech} latency_ms=${queuedAt - turn.startedAt} chars=${text.length} text=${JSON.stringify(text)} spoken=${JSON.stringify(spokenText)}`,
+		`queue turn=${turn.id} speech=${speechIndex} pending=${turn.pendingSpeech} latency_ms=${queuedAt - turn.startedAt} lang=${settings.language ?? ""} voice=${settings.voiceName ?? ""} chars=${text.length} text=${JSON.stringify(text)} spoken=${JSON.stringify(spokenText)}`,
 	);
 	try {
 		tts.speak(spokenText, {
@@ -126,6 +165,7 @@ function speakSentence(turn, sentence) {
 			voiceName: settings.voiceName,
 			onStart: (sampleRate) => {
 				if (canAcceptTurn(activeTurn, turn, activeTurnId)) {
+					recordFirstTtsAudio(turn);
 					log(
 						"tts",
 						`audio_start turn=${turn.id} speech=${speechIndex} latency_ms=${Date.now() - queuedAt} turn_latency_ms=${Date.now() - turn.startedAt} sampleRate=${sampleRate}`,
@@ -167,9 +207,22 @@ function speakSentence(turn, sentence) {
 	}
 }
 
+function completeImmediateReply(turn, reply) {
+	appendReply(turn, reply);
+	sendJson(turn.ws, { type: "reply_delta", text: reply });
+	sendJson(turn.ws, { type: "done", reply });
+	speakSentence(turn, reply);
+	markLlmDone(turn);
+	maybeCompleteTurn(turn);
+}
+
 async function handleFinal(ws, transcript) {
 	const normalizedTranscript = String(transcript ?? "").trim();
 	if (shouldWaitForUser(normalizedTranscript)) {
+		emitIgnoredTurnLog({
+			reason: "wait_for_user",
+			transcript: normalizedTranscript,
+		});
 		log(
 			"turn",
 			`wait_for_user transcript=${JSON.stringify(normalizedTranscript)}`,
@@ -186,11 +239,21 @@ async function handleFinal(ws, transcript) {
 	let firstDeltaAt = 0;
 	const startedAt = Date.now();
 	const settings = clientSettings.get(ws) ?? {};
+	const history = clientHistory.get(ws) ?? createSessionHistory();
 	const turn = createTurn({
 		id: turnId,
 		startedAt,
 		ws,
 	});
+	turn.userTranscript = normalizedTranscript;
+	turn.logEvent = createTurnLog({
+		turnId,
+		startedAt,
+		transcript: normalizedTranscript,
+		settings,
+		config,
+	});
+	turn.logEvent.history_turns = history.size();
 	activeTurn = turn;
 
 	sendJson(ws, { type: "transcript", text: normalizedTranscript });
@@ -200,22 +263,51 @@ async function handleFinal(ws, transcript) {
 		`start turn=${turnId} transcript=${JSON.stringify(normalizedTranscript)}`,
 	);
 
+	if (
+		settings.language === "ru" &&
+		shouldClarifyRussianTranscript(normalizedTranscript)
+	) {
+		completeImmediateReply(
+			turn,
+			"Не расслышал. Повтори, пожалуйста, по-русски.",
+		);
+		return;
+	}
+
+	const lastAssistant = history.lastAssistant();
+	if (lastAssistant && isRepeatLastAnswerRequest(normalizedTranscript)) {
+		completeImmediateReply(turn, lastAssistant);
+		return;
+	}
+
 	try {
 		const messages = await planReply({
 			config,
+			history: history.messages(),
 			prompt: normalizedTranscript,
 			settings,
 			signal: controller.signal,
 			toolManager: webTools,
 			turnId,
-			onPreamble: (sentence) => speakSentence(turn, sentence),
-			onToolActivity: ({ active, name }) => {
-				if (!canAcceptTurn(activeTurn, turn, activeTurnId)) return;
-				sendJson(ws, { type: "web_search", active, name });
+			onPreamble: (sentence) => {
+				recordToolPreamble({ turn, sentence, startedAt });
+				speakSentence(turn, sentence);
 			},
+			onToolActivity: createToolActivityHandler({
+				turn,
+				canAccept: () => canAcceptTurn(activeTurn, turn, activeTurnId),
+				recordToolCall,
+				sendToolState: (state) =>
+					sendJson(ws, { type: "web_search", ...state }),
+			}),
 		});
+		if (messages?.kind === "direct_reply") {
+			completeImmediateReply(turn, messages.reply);
+			return;
+		}
 		for await (const delta of streamLlamaReply({
 			url: config.llamaUrl,
+			history: history.messages(),
 			prompt: normalizedTranscript,
 			signal: controller.signal,
 			systemPrompt: settings.systemPrompt,
@@ -228,6 +320,7 @@ async function handleFinal(ws, transcript) {
 			if (!canAcceptTurn(activeTurn, turn, activeTurnId)) return;
 			if (!firstDeltaAt) {
 				firstDeltaAt = Date.now();
+				turn.logEvent.first_delta_ms = firstDeltaAt - startedAt;
 				log(
 					"llm",
 					`first_delta turn=${turnId} latency_ms=${firstDeltaAt - startedAt}`,
@@ -249,6 +342,12 @@ async function handleFinal(ws, transcript) {
 	} catch (error) {
 		if (error instanceof Error && error.name === "AbortError") return;
 		if (turn === activeTurn) activeTurn = undefined;
+		emitTurnLog(turn, "error", {
+			...(error instanceof Error
+				? { error_name: error.name, error_message: error.message }
+				: { error_message: String(error) }),
+		});
+		logError("turn", "voice turn failed", error, { turn_id: turnId });
 		sendJson(ws, { type: "web_search", active: false });
 		sendJson(ws, {
 			type: "error",
@@ -272,25 +371,34 @@ wss.on("connection", (ws) => {
 
 	activeClient = ws;
 	clientSettings.set(ws, {});
+	clientHistory.set(ws, createSessionHistory());
 	sendJson(ws, { type: "status", text: "connected" });
-	sendJson(ws, { type: "state", phase: "hearing" });
+	sendJson(ws, { type: "state", phase: "warming" });
 
 	let sttSessionId = 0;
+	let sttReady = false;
 	let stt = startSttWorker();
 
 	function startSttWorker() {
 		sttSessionId += 1;
 		const sessionId = sttSessionId;
+		sttReady = false;
+		sendJson(ws, { type: "state", phase: "warming" });
+		sendJson(ws, { type: "stt_ready", ready: false });
 		return new SttWorker({
 			...config.stt,
 			onEvent: (event) => {
 				if (sessionId !== sttSessionId) return;
 				sendJson(ws, { type: "stt_event", event });
-				if (event.type === "ready")
+				if (event.type === "ready") {
 					log(
 						"stt",
 						`ready session=${sessionId} sampleRate=${event.sampleRate} vadChunkMs=${event.vadChunkMs}`,
 					);
+					sttReady = true;
+					sendJson(ws, { type: "stt_ready", ready: true });
+					sendJson(ws, { type: "state", phase: "hearing" });
+				}
 				if (event.type === "error")
 					sendJson(ws, { type: "error", message: event.message });
 				if (event.type === "final" && event.text?.trim())
@@ -316,6 +424,7 @@ wss.on("connection", (ws) => {
 	ws.on("message", async (data, isBinary) => {
 		try {
 			if (isBinary) {
+				if (!sttReady) return;
 				const ok = stt.pushPcm(
 					Buffer.isBuffer(data) ? data : Buffer.from(data),
 				);
@@ -325,24 +434,12 @@ wss.on("connection", (ws) => {
 			}
 			const msg = JSON.parse(String(data));
 			if (msg.type === "settings") {
-				const maxTokens = Number(msg.maxTokens);
-				const language = String(msg.language ?? "").trim();
-				const voiceName = String(msg.voiceName ?? "").trim();
-				clientSettings.set(ws, {
-					systemPrompt: String(msg.systemPrompt ?? "").trim(),
-					language: supertonicLanguages.has(language) ? language : undefined,
-					voiceName: supertonicVoiceNames.has(voiceName)
-						? voiceName
-						: undefined,
-					maxTokens:
-						Number.isInteger(maxTokens) && maxTokens > 0
-							? maxTokens
-							: undefined,
-					temperature: parseNumber(msg.temperature, { min: 0, max: 2 }),
-					topP: parseNumber(msg.topP, { min: 0, max: 1 }),
-					repeatPenalty: parseNumber(msg.repeatPenalty, { min: 1, max: 2 }),
-					webToolsEnabled: normalizeWebToolsEnabled(msg.webToolsEnabled),
-				});
+				const parsed = parseClientSettingsMessage(msg);
+				clientSettings.set(ws, parsed.settings);
+				log(
+					"settings",
+					`language=${parsed.logFields.language} voice=${parsed.logFields.voiceName} prompt=${JSON.stringify(parsed.logFields.systemPromptPreview)}`,
+				);
 				return;
 			}
 			if (msg.type === "barge_in") {
@@ -350,7 +447,6 @@ wss.on("connection", (ws) => {
 				cancelTurn("barge-in");
 				restartSttWorker("barge-in");
 				sendJson(ws, { type: "status", text: "barge-in" });
-				sendJson(ws, { type: "state", phase: "hearing" });
 			}
 		} catch (error) {
 			sendJson(ws, {

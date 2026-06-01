@@ -1,9 +1,10 @@
-export type Phase = "idle" | "hearing" | "thinking" | "speaking";
+export type Phase = "idle" | "warming" | "hearing" | "thinking" | "speaking";
 export type Screen = "welcome" | "pick";
 
 export interface SettingsState {
 	open: boolean;
 	systemPrompt: string;
+	systemPromptEdited: boolean;
 	languageCode: string;
 	maxTokens: string;
 	temperature: string;
@@ -16,7 +17,7 @@ export interface SettingsState {
 export type SettingsAction =
 	| { type: "setOpen"; value: boolean }
 	| { type: "setSystemPrompt"; value: string }
-	| { type: "setLanguageCode"; value: string }
+	| { type: "setLanguageCode"; defaultPrompt: string; value: string }
 	| { type: "setMaxTokens"; value: string }
 	| { type: "setTemperature"; value: string }
 	| { type: "setTopP"; value: string }

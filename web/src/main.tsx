@@ -29,9 +29,15 @@ function settingsReducer(
 		case "setOpen":
 			return { ...state, open: action.value };
 		case "setSystemPrompt":
-			return { ...state, systemPrompt: action.value };
+			return { ...state, systemPrompt: action.value, systemPromptEdited: true };
 		case "setLanguageCode":
-			return { ...state, languageCode: action.value };
+			return {
+				...state,
+				languageCode: action.value,
+				systemPrompt: state.systemPromptEdited
+					? state.systemPrompt
+					: action.defaultPrompt,
+			};
 		case "setMaxTokens":
 			return { ...state, maxTokens: action.value };
 		case "setTemperature":
@@ -82,6 +88,7 @@ function cancelAnimationFrameRef(ref: React.RefObject<number>) {
 }
 
 function App() {
+	const initialLanguageCode = React.useMemo(() => getInitialLanguage(), []);
 	const [view, setView] = React.useReducer(viewReducer, {
 		canScrollLeft: false,
 		canScrollRight: false,
@@ -91,8 +98,9 @@ function App() {
 	});
 	const [settings, dispatchSettings] = React.useReducer(settingsReducer, {
 		open: false,
-		systemPrompt: cartoonVoiceAgent.defaultInstructions,
-		languageCode: getInitialLanguage(),
+		languageCode: initialLanguageCode,
+		systemPrompt: cartoonVoiceAgent.defaultInstructions(initialLanguageCode),
+		systemPromptEdited: false,
 		maxTokens: "512",
 		temperature: "0.35",
 		topP: "0.9",

@@ -13,9 +13,9 @@ import {
 	ttsFrameStart,
 } from "./voice-wire";
 
-const bargeInFramesRequired = 4;
-const bargeInRmsThreshold = 0.025;
-const bargeInReleaseMs = 450;
+const bargeInFramesRequired = 6;
+const bargeInRmsThreshold = 0.035;
+const bargeInReleaseMs = 800;
 
 interface UseVoiceSessionOptions {
 	previewAnimation: boolean;
@@ -76,6 +76,7 @@ export function useVoiceSession({
 	const [active, setActive] = React.useState(false);
 	const [jawOpen, setJawOpen] = React.useState(0);
 	const [webSearchActive, setWebSearchActive] = React.useState(false);
+	const sttReadyRef = React.useRef(false);
 	const wsRef = React.useRef<WebSocket | null>(null);
 	const micStreamRef = React.useRef<MediaStream | null>(null);
 	const micContextRef = React.useRef<AudioContext | null>(null);
@@ -226,6 +227,7 @@ export function useVoiceSession({
 			micContextRef.current = null;
 			await stopPlayback();
 			setWebSearchActive(false);
+			sttReadyRef.current = false;
 			serverPhaseRef.current = "idle";
 			bargeFramesRef.current = 0;
 			bargeInSentRef.current = false;
@@ -239,7 +241,13 @@ export function useVoiceSession({
 		(event: AudioProcessingEvent) => {
 			const ws = wsRef.current;
 			const micContext = micContextRef.current;
-			if (!ws || ws.readyState !== WebSocket.OPEN || !micContext) return;
+			if (
+				!ws ||
+				ws.readyState !== WebSocket.OPEN ||
+				!micContext ||
+				!sttReadyRef.current
+			)
+				return;
 			const input = new Float32Array(event.inputBuffer.getChannelData(0));
 			let sum = 0;
 			for (const sample of input) sum += sample * sample;
@@ -311,6 +319,13 @@ export function useVoiceSession({
 			if (msg.type === "web_search") {
 				setWebSearchActive(Boolean(msg.active));
 			}
+			if (msg.type === "stt_ready") {
+				sttReadyRef.current = Boolean(msg.ready);
+				if (!msg.ready && serverPhaseRef.current === "hearing") {
+					serverPhaseRef.current = "warming";
+					setPhase("warming");
+				}
+			}
 			if (msg.type === "state") {
 				serverPhaseRef.current = msg.phase;
 				if (msg.phase === "thinking" || msg.phase === "speaking") {
@@ -342,6 +357,9 @@ export function useVoiceSession({
 		const ws = new WebSocket(`${protocol}://${location.host}/voice`);
 		ws.binaryType = "arraybuffer";
 		wsRef.current = ws;
+		sttReadyRef.current = false;
+		serverPhaseRef.current = "warming";
+		setPhase("warming");
 		ws.onopen = async () => {
 			ws.send(
 				JSON.stringify({
@@ -360,11 +378,11 @@ export function useVoiceSession({
 					webToolsEnabled: settings.webToolsEnabled,
 				}),
 			);
-			serverPhaseRef.current = "hearing";
+			serverPhaseRef.current = "warming";
 			bargeFramesRef.current = 0;
 			bargeInSentRef.current = false;
 			bargeInReleasedUntilRef.current = 0;
-			setPhase("hearing");
+			setPhase("warming");
 			micStreamRef.current = await navigator.mediaDevices.getUserMedia({
 				audio: {
 					echoCancellation: true,

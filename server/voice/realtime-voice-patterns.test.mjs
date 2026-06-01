@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
 	pickToolPreamble,
+	shouldClarifyRussianTranscript,
 	shouldWaitForUser,
 } from "./realtime-voice-patterns.mjs";
 
@@ -10,11 +11,22 @@ describe("realtime voice patterns", () => {
 		expect(shouldWaitForUser("эм")).toBe(true);
 		expect(shouldWaitForUser("фоновый шум")).toBe(true);
 		expect(shouldWaitForUser("silence")).toBe(true);
+		expect(shouldWaitForUser("Yeah.")).toBe(true);
+		expect(shouldWaitForUser("Yeah, I think that's.")).toBe(true);
 	});
 
 	it("does not wait on real short questions", () => {
 		expect(shouldWaitForUser("когда были первые пожарные")).toBe(false);
 		expect(shouldWaitForUser("проверь сайт OpenAI")).toBe(false);
+	});
+
+	it("detects likely garbled English STT in Russian conversations", () => {
+		expect(shouldClarifyRussianTranscript("Has sure.")).toBe(true);
+		expect(shouldClarifyRussianTranscript("Could you please")).toBe(true);
+		expect(shouldClarifyRussianTranscript("Flomni")).toBe(true);
+		expect(shouldClarifyRussianTranscript("Вы так.")).toBe(true);
+		expect(shouldClarifyRussianTranscript("Что такое Flomni?")).toBe(false);
+		expect(shouldClarifyRussianTranscript("Ты кто?")).toBe(false);
 	});
 
 	it("varies tool preambles by turn id", () => {

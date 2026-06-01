@@ -30,6 +30,8 @@ export function WelcomeScreen({
 	selected,
 	webSearchActive,
 }: WelcomeScreenProps) {
+	const phaseLabel =
+		phase === "warming" ? "Preparing" : phase[0].toUpperCase() + phase.slice(1);
 	return (
 		<section className="welcome-screen">
 			<div className="welcome-inner">
@@ -75,7 +77,7 @@ export function WelcomeScreen({
 						{active ? <MicOff /> : <Play fill="currentColor" />}
 					</span>
 					<span className="demo-label">
-						{active ? phase : "Speak directly"}
+						{active ? phaseLabel : "Speak directly"}
 					</span>
 					<span className="avatar-badge">
 						<img src={selected.image} alt="" />

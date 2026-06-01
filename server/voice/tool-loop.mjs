@@ -4,7 +4,6 @@ import { log } from "./logger.mjs";
 
 const toolCallPattern = /<tool_call>\s*([\s\S]*?)\s*<\/tool_call>/g;
 const webToolInstructions = [
-	"# Tool Usage",
 	"Доступны только перечисленные веб-инструменты. Не выдумывай, не переименовывай и не симулируй инструменты.",
 	"Веб-инструменты read-only. Не спрашивай подтверждение перед очевидным read-only поиском, если запрос понятен.",
 	"Вызови инструмент только если вопрос требует свежей, внешней, проверяемой информации или пользователь явно просит проверить онлайн.",
@@ -13,7 +12,6 @@ const webToolInstructions = [
 ].join("\n");
 
 const webToolResultInstructions = [
-	"# Tool Result Response",
 	"Если require_grounded_answer=true, отвечай только на основе results.",
 	"Если verified=false, results пустые или нужного факта нет в results, скажи, что не удалось надежно проверить, и не угадывай.",
 	"Это голосовой ответ: кратко перескажи человеческими словами, не выводи ссылки, URL, Markdown, XML, JSON, скобки с адресами сайтов или технические имена инструментов.",
@@ -29,7 +27,7 @@ export function parseToolCalls(text) {
 	});
 }
 
-function toolResultMessage(results) {
+export function toolResultMessage(results) {
 	const payload = {
 		type: "web_tool_results",
 		require_grounded_answer: true,
@@ -41,6 +39,62 @@ function toolResultMessage(results) {
 		JSON.stringify(payload),
 		webToolResultInstructions,
 	].join("\n");
+}
+
+function compactDirectWebSearchResult(result) {
+	const rawResults = Array.isArray(result?.results) ? result.results : [];
+	return {
+		verified: result?.verified === true,
+		reason: compactText(result?.reason, 180),
+		results: rawResults.slice(0, 3).map((item) => ({
+			title: compactText(item?.title, 120),
+			content: compactText(item?.content ?? item?.snippet, 280),
+		})),
+	};
+}
+
+export async function prepareDirectWebSearchMessages({
+	history,
+	prompt,
+	systemPrompt,
+	signal,
+	toolManager,
+	onToolActivity,
+}) {
+	const compactHistory = Array.isArray(history) ? history.slice(-2) : history;
+	const messages = buildVoiceMessages({
+		prompt,
+		systemPrompt,
+		history: compactHistory,
+	});
+	if (!toolManager?.enabled) return messages;
+	onToolActivity?.({ active: true, name: "web_search" });
+	try {
+		const result = await toolManager.callTool(
+			"web_search",
+			{ query: prompt },
+			{ signal },
+		);
+		const compactResult = compactDirectWebSearchResult(result);
+		log(
+			"tool",
+			`direct_search name=web_search chars=${JSON.stringify(result).length} compact_chars=${JSON.stringify(compactResult).length} preview=${JSON.stringify(compactText(JSON.stringify(compactResult)))}`,
+		);
+		messages.push({
+			role: "user",
+			content: toolResultMessage([
+				{ name: "web_search", result: compactResult },
+			]),
+		});
+		messages.push({
+			role: "user",
+			content:
+				"Сформулируй финальный голосовой ответ только на основе результатов поиска. Если verified=false или результатов нет, скажи, что не удалось надежно проверить. Не говори, что у тебя нет доступа к интернету.",
+		});
+		return messages;
+	} finally {
+		onToolActivity?.({ active: false, name: "web_search" });
+	}
 }
 
 function compactText(value, maxLength = 500) {
@@ -112,6 +166,7 @@ async function callTools({
 
 export async function prepareToolAugmentedMessages({
 	llamaUrl,
+	history,
 	prompt,
 	systemPrompt,
 	signal,
@@ -124,7 +179,7 @@ export async function prepareToolAugmentedMessages({
 	decisionMaxTokens,
 	onToolActivity,
 }) {
-	const messages = buildVoiceMessages({ prompt, systemPrompt });
+	const messages = buildVoiceMessages({ prompt, systemPrompt, history });
 	const baseMessages = [...messages];
 	if (!toolManager?.tools?.length || rounds <= 0) return messages;
 	messages.push({

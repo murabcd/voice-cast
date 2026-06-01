@@ -30,6 +30,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { languages } from "./app-data";
 import type { Character, SettingsAction, SettingsState } from "./app-types";
+import { cartoonVoiceAgent } from "./voice-agent-config";
 
 interface SettingsDialogProps {
 	onChange: React.Dispatch<SettingsAction>;
@@ -73,7 +74,11 @@ export function SettingsDialog({
 						<Select
 							value={settings.languageCode}
 							onValueChange={(value) =>
-								onChange({ type: "setLanguageCode", value })
+								onChange({
+									type: "setLanguageCode",
+									value,
+									defaultPrompt: cartoonVoiceAgent.defaultInstructions(value),
+								})
 							}
 						>
 							<SelectTrigger

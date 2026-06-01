@@ -76,10 +76,11 @@ async function fetchLlama({
 
 export async function completeLlamaReply({
 	url,
+	history,
 	prompt,
 	signal,
 	systemPrompt,
-	messages = buildVoiceMessages({ prompt, systemPrompt }),
+	messages = buildVoiceMessages({ prompt, systemPrompt, history }),
 	maxTokens,
 	temperature = 0.35,
 	topP = 0.9,
@@ -103,10 +104,11 @@ export async function completeLlamaReply({
 
 export async function* streamLlamaReply({
 	url,
+	history,
 	prompt,
 	signal,
 	systemPrompt,
-	messages = buildVoiceMessages({ prompt, systemPrompt }),
+	messages = buildVoiceMessages({ prompt, systemPrompt, history }),
 	maxTokens,
 	temperature = 0.35,
 	topP = 0.9,

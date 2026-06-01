@@ -149,7 +149,10 @@ export class SupertonicTtsWorker {
 		const lang = supertonicLanguages.has(callbacks.lang)
 			? callbacks.lang
 			: this.lang;
-		const style = this.loadStyle(callbacks.voiceName);
+		const voiceName = supertonicVoiceNames.has(callbacks.voiceName)
+			? callbacks.voiceName
+			: this.defaultVoiceName;
+		const style = this.loadStyle(voiceName);
 		this.pending.set(id, request);
 
 		this.queue = this.queue
@@ -170,7 +173,7 @@ export class SupertonicTtsWorker {
 					callbacks.onStart(this.sampleRate);
 					log(
 						"tts",
-						`supertonic generated_buffer id=${id} generation_ms=${generatedAt - started} samples=${wav.length}`,
+						`supertonic generated_buffer id=${id} generation_ms=${generatedAt - started} lang=${lang} voice=${voiceName} samples=${wav.length}`,
 					);
 					const pcm = floatWavToPcm16(wav);
 					let chunks = 0;
