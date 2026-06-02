@@ -216,8 +216,12 @@ function useResizableSourcePanel(enabled: boolean) {
 		() => sourcePanelWidthBounds(viewportWidth),
 		[viewportWidth],
 	);
-	const [panelWidth, setPanelWidth] = React.useState(() =>
-		clamp(defaultSourcePanelWidth, bounds.min, bounds.max),
+	const [preferredPanelWidth, setPreferredPanelWidth] = React.useState(
+		readPreferredSourcePanelWidth,
+	);
+	const panelWidth = React.useMemo(
+		() => clamp(preferredPanelWidth, bounds.min, bounds.max),
+		[preferredPanelWidth, bounds],
 	);
 	const panelWidthRef = React.useRef(panelWidth);
 	const grabOffsetRef = React.useRef(0);
@@ -225,32 +229,43 @@ function useResizableSourcePanel(enabled: boolean) {
 	const animationFrameRef = React.useRef<number | null>(null);
 	const [isResizing, setIsResizing] = React.useState(false);
 
-	const commitPanelWidth = React.useCallback((nextWidth: number) => {
+	const cancelScheduledPanelWidth = React.useCallback(() => {
 		if (animationFrameRef.current !== null) {
 			window.cancelAnimationFrame(animationFrameRef.current);
-			animationFrameRef.current = null;
 		}
-		pendingWidthRef.current = null;
-		panelWidthRef.current = nextWidth;
-		setPanelWidth((currentWidth) =>
-			currentWidth === nextWidth ? currentWidth : nextWidth,
-		);
+		animationFrameRef.current = null;
 	}, []);
 
-	const schedulePanelWidth = React.useCallback((nextWidth: number) => {
-		pendingWidthRef.current = nextWidth;
-		if (animationFrameRef.current !== null) return;
-		animationFrameRef.current = window.requestAnimationFrame(() => {
-			animationFrameRef.current = null;
-			const pendingWidth = pendingWidthRef.current;
+	const commitPanelWidth = React.useCallback(
+		(nextWidth: number) => {
+			const clampedWidth = clamp(nextWidth, bounds.min, bounds.max);
+			cancelScheduledPanelWidth();
 			pendingWidthRef.current = null;
-			if (pendingWidth === null) return;
-			panelWidthRef.current = pendingWidth;
-			setPanelWidth((currentWidth) =>
-				currentWidth === pendingWidth ? currentWidth : pendingWidth,
+			panelWidthRef.current = clampedWidth;
+			setPreferredPanelWidth((currentWidth) =>
+				currentWidth === clampedWidth ? currentWidth : clampedWidth,
 			);
-		});
-	}, []);
+		},
+		[bounds, cancelScheduledPanelWidth],
+	);
+
+	const schedulePanelWidth = React.useCallback(
+		(nextWidth: number) => {
+			pendingWidthRef.current = clamp(nextWidth, bounds.min, bounds.max);
+			if (animationFrameRef.current !== null) return;
+			animationFrameRef.current = window.requestAnimationFrame(() => {
+				animationFrameRef.current = null;
+				const pendingWidth = pendingWidthRef.current;
+				pendingWidthRef.current = null;
+				if (pendingWidth === null) return;
+				panelWidthRef.current = pendingWidth;
+				setPreferredPanelWidth((currentWidth) =>
+					currentWidth === pendingWidth ? currentWidth : pendingWidth,
+				);
+			});
+		},
+		[bounds],
+	);
 
 	const persistPanelWidth = React.useCallback((nextWidth: number) => {
 		try {
@@ -278,27 +293,8 @@ function useResizableSourcePanel(enabled: boolean) {
 	}, []);
 
 	React.useEffect(() => {
-		if (!enabled || typeof window === "undefined") return;
-		const storedValue = window.localStorage.getItem(sourcePanelWidthStorageKey);
-		const storedWidth = storedValue ? Number.parseFloat(storedValue) : NaN;
-		const nextWidth = Number.isFinite(storedWidth)
-			? storedWidth
-			: defaultSourcePanelWidth;
-		commitPanelWidth(clamp(nextWidth, bounds.min, bounds.max));
-	}, [bounds, commitPanelWidth, enabled]);
-
-	React.useEffect(() => {
-		commitPanelWidth(clamp(panelWidthRef.current, bounds.min, bounds.max));
-	}, [bounds, commitPanelWidth]);
-
-	React.useEffect(() => {
-		const animationFrameId = animationFrameRef.current;
-		return () => {
-			if (animationFrameId !== null) {
-				window.cancelAnimationFrame(animationFrameId);
-			}
-		};
-	}, []);
+		return cancelScheduledPanelWidth;
+	}, [cancelScheduledPanelWidth]);
 
 	React.useEffect(() => {
 		if (!isResizing || typeof document === "undefined") return;
@@ -424,6 +420,13 @@ function sourcePanelWidthBounds(viewportWidth: number) {
 		min: Math.min(minSourcePanelWidth, maxWidth),
 		max: maxWidth,
 	};
+}
+
+function readPreferredSourcePanelWidth() {
+	if (typeof window === "undefined") return defaultSourcePanelWidth;
+	const storedValue = window.localStorage.getItem(sourcePanelWidthStorageKey);
+	const storedWidth = storedValue ? Number.parseFloat(storedValue) : NaN;
+	return Number.isFinite(storedWidth) ? storedWidth : defaultSourcePanelWidth;
 }
 
 function clamp(value: number, min: number, max: number) {

@@ -1,3 +1,5 @@
+import { toolProvider } from "./tool-provider.mjs";
+
 export function createToolActivityHandler({
 	turn,
 	canAccept,
@@ -8,10 +10,10 @@ export function createToolActivityHandler({
 		if (!canAccept()) return;
 		if (active && name) {
 			recordToolCall(turn, name);
-			const provider = toolActivityProvider(name);
+			const provider = toolProvider(name);
 			if (provider) {
 				turn.activeToolProvider = provider;
-				sendToolState({ active, name });
+				sendToolState({ active, name, provider });
 			}
 			return;
 		}
@@ -22,10 +24,4 @@ export function createToolActivityHandler({
 export function resetToolActivity({ turn, sendToolState }) {
 	if (turn.activeToolProvider) turn.activeToolProvider = undefined;
 	sendToolState({ active: false });
-}
-
-function toolActivityProvider(name) {
-	if (name.startsWith("web_")) return "web";
-	if (name.startsWith("yandex_tracker_")) return "yandex-tracker";
-	return undefined;
 }

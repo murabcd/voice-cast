@@ -31,7 +31,7 @@ describe("SmolLM3 tool call parsing", () => {
 		expect(parseToolCalls('<tool_call>{"name":</tool_call>')).toEqual([]);
 	});
 
-	it("forces a direct web search when the model declines a selected web route", async () => {
+	it("does not silently change a declined assisted web route into direct search", async () => {
 		const calls = [];
 		const messages = await prepareToolAugmentedMessages({
 			llamaUrl: "http://127.0.0.1:18081",
@@ -59,13 +59,13 @@ describe("SmolLM3 tool call parsing", () => {
 			decisionMaxTokens: 16,
 		});
 
-		expect(calls).toEqual([
-			{
-				name: "web_search",
-				args: { query: "What is the latest SmolLM3 release?" },
-			},
-		]);
-		expect(messages.at(-2).content).toContain("tool_results");
+		expect(calls).toEqual([]);
+		expect(messages.at(-1).content).toContain(
+			"Подходящий инструмент не был вызван",
+		);
+		expect(messages.map((message) => message.content).join("\n")).not.toContain(
+			"tool_results",
+		);
 	});
 
 	it("passes explicitly fetched page content to the final answer prompt", async () => {
@@ -270,12 +270,13 @@ describe("SmolLM3 tool call parsing", () => {
 		]);
 
 		expect(message).toContain('"sections"');
+		expect(message).toContain('"status":{"kind":"found"}');
 		expect(message).toContain('"sources":["PROJ-4507"]');
 		expect(message).not.toContain("tracker.yandex.ru");
 		expect(message).not.toContain("x".repeat(300));
 	});
 
-	it("tells the final model that non-empty Tracker sections mean the issue was found", async () => {
+	it("passes structured Tracker result status to the final model", async () => {
 		const messages = await prepareDirectToolResultMessages({
 			history: [],
 			prompt: "Найди задачу 45.07",
@@ -310,9 +311,10 @@ describe("SmolLM3 tool call parsing", () => {
 			toolArguments: { issueKey: "PROJ-4507" },
 		});
 
-		expect(messages.at(-1)?.content).toContain("инструмент нашел задачу");
-		expect(messages.at(-1)?.content).toContain("не читай Context дословно");
+		expect(messages.at(-1)?.content).toContain("status.kind=found");
+		expect(messages.at(-1)?.content).toContain("status.kind=empty");
 		expect(messages.at(-1)?.content).toContain("одном-двух предложениях");
+		expect(messages.at(-2)?.content).toContain('"status":{"kind":"found"}');
 		expect(messages.at(-2)?.content).toContain(
 			"Operators cannot choose template types",
 		);

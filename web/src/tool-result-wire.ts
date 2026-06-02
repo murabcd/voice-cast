@@ -56,10 +56,7 @@ export function parseToolActivityProvider(
 ): ToolActivityProvider | null {
 	const parsed = toolActivityMessageSchema.safeParse(value);
 	if (!parsed.success || !parsed.data.active) return null;
-	if (parsed.data.provider) return parsed.data.provider;
-	if (parsed.data.name?.startsWith("web_")) return "web";
-	if (parsed.data.name?.startsWith("yandex_tracker_")) return "yandex-tracker";
-	return null;
+	return parsed.data.provider ?? null;
 }
 
 export function parseToolResultSummary(

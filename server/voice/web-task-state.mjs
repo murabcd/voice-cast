@@ -1,3 +1,5 @@
+import { isWebToolName } from "./tool-provider.mjs";
+
 function compactText(value, maxLength = 260) {
 	return String(value ?? "")
 		.replaceAll(/\s+/g, " ")
@@ -9,9 +11,7 @@ export function webTaskFromTurnLog(logEvent) {
 	const toolNames = Array.isArray(logEvent?.tool_names)
 		? logEvent.tool_names
 		: [];
-	const usedWeb = toolNames.some(
-		(name) => name === "web_search" || name === "web_fetch",
-	);
+	const usedWeb = toolNames.some(isWebToolName);
 	if (!usedWeb) return undefined;
 
 	const routeArguments =

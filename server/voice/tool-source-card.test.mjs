@@ -196,4 +196,18 @@ describe("tool source cards", () => {
 			title: "Tracker results",
 		});
 	});
+
+	it("does not coerce unknown tools into a source-card provider", () => {
+		expect(
+			summarizeToolResults({
+				calls: [{ name: "files__read", arguments: { path: "/tmp/a.txt" } }],
+				results: [
+					{
+						name: "files__read",
+						result: { content: [{ type: "text", text: "file body" }] },
+					},
+				],
+			}),
+		).toBeUndefined();
+	});
 });

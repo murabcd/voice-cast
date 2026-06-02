@@ -25,6 +25,19 @@ describe("client settings", () => {
 		).toBeUndefined();
 	});
 
+	it("derives the Supertonic voice from the server-owned character preset", () => {
+		const parsed = parseClientSettingsMessage({
+			characterId: 2,
+			voiceName: "M1",
+		});
+
+		expect(parsed.settings).toMatchObject({
+			characterId: 2,
+			voiceName: "F1",
+		});
+		expect(parsed.logFields.voiceName).toBe("F1");
+	});
+
 	it("uses the base system prompt field instead of runtime prompt blobs", () => {
 		const parsed = parseClientSettingsMessage({
 			baseSystemPrompt: "Base voice behavior.",

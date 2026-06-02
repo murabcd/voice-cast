@@ -19,6 +19,7 @@ import {
 	floatToPcm16,
 	pcm16ToFloat,
 } from "./voice-audio-codec";
+import { parseVoiceServerMessage } from "./voice-server-message-wire";
 import {
 	ttsFrameAudio,
 	ttsFrameDone,
@@ -259,8 +260,9 @@ export function useVoiceSession({
 				return;
 			}
 
-			const msg = JSON.parse(event.data);
-			if (msg.type === "web_search" || msg.type === "tool_activity") {
+			const msg = parseVoiceServerMessage(String(event.data));
+			if (!msg) return;
+			if (msg.type === "tool_activity") {
 				setActiveToolProvider(parseToolActivityProvider(msg));
 			}
 			if (msg.type === "tool_result") {
@@ -294,10 +296,7 @@ export function useVoiceSession({
 				bargeInDetector.reset();
 				if (!outputActiveRef.current) setPhase("hearing");
 			}
-			if (
-				msg.type === "character_handoff" &&
-				typeof msg.characterId === "number"
-			) {
+			if (msg.type === "character_handoff") {
 				onCharacterHandoff?.(msg.characterId);
 			}
 		},
@@ -320,7 +319,6 @@ export function useVoiceSession({
 					baseSystemPrompt: settings.systemPrompt,
 					characterId: selected.id,
 					language: selectedLanguage.code,
-					voiceName: selected.voiceName,
 					maxTokens: settings.maxTokens,
 					temperature: settings.temperature,
 					topP: settings.topP,
@@ -363,7 +361,6 @@ export function useVoiceSession({
 		handleServerMessage,
 		selected.id,
 		selectedLanguage.code,
-		selected.voiceName,
 		settings.autoGreetingEnabled,
 		settings.maxTokens,
 		settings.repeatPenalty,

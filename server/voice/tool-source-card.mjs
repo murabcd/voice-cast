@@ -1,3 +1,5 @@
+import { toolProvider } from "./tool-provider.mjs";
+
 function compactText(value, maxLength = 500) {
 	const text = String(value ?? "")
 		.replaceAll(/\s+/g, " ")
@@ -46,9 +48,8 @@ function displayText(value, maxLength = 2400) {
 
 export function summarizeToolResults({ calls, results }) {
 	const tools = results.map((entry) => entry.name);
-	const provider = tools.some((name) => name.startsWith("web_"))
-		? "web"
-		: "yandex-tracker";
+	const provider = tools.map((name) => toolProvider(name)).find(Boolean);
+	if (!provider) return undefined;
 	const query = firstQuery(calls);
 	const items = results.flatMap((entry) => resultItems(entry.result));
 	const sources = dedupeSources([...callSourceItems(calls), ...items]);

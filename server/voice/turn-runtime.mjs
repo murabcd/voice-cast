@@ -1,5 +1,6 @@
 import WebSocket from "ws";
 import { cleanLlmText } from "./text.mjs";
+import { isWebToolName } from "./tool-provider.mjs";
 import { emitTurnLog } from "./turn-logging.mjs";
 import { webTaskFromTurnLog } from "./web-task-state.mjs";
 import { sendJson } from "./wire.mjs";
@@ -114,9 +115,7 @@ export function createTurnRuntime({
 				user: turn.userTranscript,
 				assistant: reply,
 				metadata: {
-					usedWeb: (turn.logEvent.tool_names ?? []).some((name) =>
-						name.startsWith("web_"),
-					),
+					usedWeb: (turn.logEvent.tool_names ?? []).some(isWebToolName),
 					toolNames: turn.logEvent.tool_names ?? [],
 					webTask: webTaskFromTurnLog(turn.logEvent),
 					characterHandoff: turn.logEvent.character_handoff,

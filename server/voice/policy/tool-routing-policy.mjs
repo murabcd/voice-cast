@@ -8,6 +8,7 @@ import {
 	normalizeIntentText,
 	tokenizeIntentText,
 } from "../intent-text.mjs";
+import { correctSpokenDomainLabel } from "./domain-correction-policy.mjs";
 import {
 	directWeatherPrefixes,
 	directWeatherWords,
@@ -52,26 +53,16 @@ function isAsciiDomainLabel(token) {
 	return true;
 }
 
-const domainLabelCorrections = new Map([
-	["floomne", "flomni"],
-	["flomny", "flomni"],
-	["flowny", "flomni"],
-]);
-
-function normalizeDomainLabel(token) {
-	return domainLabelCorrections.get(token) ?? token;
-}
-
-export function explicitWebUrl(text) {
+function explicitWebUrl(text) {
 	const tokens = tokenizeIntentText(text);
 	for (let index = 0; index < tokens.length - 1; index += 1) {
 		if (!domainSuffixes.has(tokens[index + 1])) continue;
 		if (!isAsciiDomainLabel(tokens[index])) continue;
-		const labels = [normalizeDomainLabel(tokens[index]), tokens[index + 1]];
+		const labels = [correctSpokenDomainLabel(tokens[index]), tokens[index + 1]];
 		for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
 			const token = tokens[cursor];
 			if (!isAsciiDomainLabel(token)) break;
-			labels.unshift(normalizeDomainLabel(token));
+			labels.unshift(correctSpokenDomainLabel(token));
 		}
 		return `https://${labels.join(".")}`;
 	}
@@ -89,7 +80,7 @@ function hasCompanyLookup(tokens) {
 	);
 }
 
-export function isDirectWebRequest(text) {
+function isDirectWebRequest(text) {
 	const { normalized, tokens } = textParts(text);
 	return (
 		hasAnyPhrase(normalized, directWebPhrases) ||
@@ -104,7 +95,7 @@ export function isDirectWebRequest(text) {
 	);
 }
 
-export function isExternalTopicRequest(text) {
+function isExternalTopicRequest(text) {
 	const { normalized, tokens } = textParts(text);
 	return (
 		hasAnyToken(tokens, externalTopicWords) ||
@@ -114,7 +105,7 @@ export function isExternalTopicRequest(text) {
 	);
 }
 
-export function isLocalConversationRequest(text) {
+function isLocalConversationRequest(text) {
 	const { normalized, tokens } = textParts(text);
 	return (
 		greetingWords.has(tokens[0]) ||
@@ -122,19 +113,19 @@ export function isLocalConversationRequest(text) {
 	);
 }
 
-export function hasNamedEntity(text) {
+function hasNamedEntity(text) {
 	return hasCapitalizedAsciiToken(text);
 }
 
-export function isQuestion(text) {
+function isQuestion(text) {
 	return hasAnyToken(tokenizeIntentText(text), questionWords);
 }
 
-export function isLocalFollowUp(text) {
+function isLocalFollowUp(text) {
 	return hasAnyPhrase(normalizeIntentText(text), localFollowUpPhrases);
 }
 
-export function isMutableFactFollowUp(text) {
+function isMutableFactFollowUp(text) {
 	const tokens = tokenizeIntentText(text);
 	return (
 		hasAnyToken(tokens, mutableFactWords) ||
@@ -143,7 +134,7 @@ export function isMutableFactFollowUp(text) {
 	);
 }
 
-export function isReferenceFollowUp(text) {
+function isReferenceFollowUp(text) {
 	const normalized = normalizeIntentText(text);
 	return hasAnyPhrase(normalized, referenceFollowUpPhrases);
 }

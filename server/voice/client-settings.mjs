@@ -1,8 +1,5 @@
 import { resolveCharacterPreset } from "./character-context.mjs";
-import {
-	supertonicLanguages,
-	supertonicVoiceNames,
-} from "./supertonic-tts-worker.mjs";
+import { supertonicLanguages } from "./supertonic-tts-worker.mjs";
 import { normalizeWebToolsEnabled } from "./tool-selector.mjs";
 
 function parseNumber(value, { min, max }) {
@@ -16,7 +13,6 @@ export function parseClientSettingsMessage(msg) {
 	const maxTokens = Number(msg.maxTokens);
 	const characterId = Number(msg.characterId);
 	const language = String(msg.language ?? "").trim();
-	const voiceName = String(msg.voiceName ?? "").trim();
 	const autoGreetingEnabled = msg.autoGreetingEnabled !== false;
 	const character = resolveCharacterPreset(characterId);
 	return {
@@ -25,7 +21,7 @@ export function parseClientSettingsMessage(msg) {
 			systemPrompt: String(msg.baseSystemPrompt ?? "").trim(),
 			characterId: character?.id,
 			language: supertonicLanguages.has(language) ? language : undefined,
-			voiceName: supertonicVoiceNames.has(voiceName) ? voiceName : undefined,
+			voiceName: character?.voiceName,
 			maxTokens:
 				Number.isInteger(maxTokens) && maxTokens > 0 ? maxTokens : undefined,
 			temperature: parseNumber(msg.temperature, { min: 0, max: 2 }),
@@ -37,7 +33,7 @@ export function parseClientSettingsMessage(msg) {
 			language,
 			autoGreetingEnabled,
 			characterId,
-			voiceName,
+			voiceName: character?.voiceName,
 			systemPromptPreview: String(msg.baseSystemPrompt ?? "").slice(0, 120),
 		},
 	};

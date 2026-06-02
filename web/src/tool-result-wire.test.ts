@@ -40,7 +40,7 @@ describe("tool result wire parsing", () => {
 		).toBeNull();
 	});
 
-	it("parses tool activity provider from explicit provider or tool name", () => {
+	it("parses tool activity provider from the explicit server-owned field", () => {
 		expect(
 			parseToolActivityProvider({
 				active: true,
@@ -52,7 +52,7 @@ describe("tool result wire parsing", () => {
 				active: true,
 				name: "web_search",
 			}),
-		).toBe("web");
+		).toBe(null);
 		expect(
 			parseToolActivityProvider({ active: false, name: "web_search" }),
 		).toBe(null);

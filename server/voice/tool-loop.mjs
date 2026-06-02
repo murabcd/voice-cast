@@ -87,13 +87,16 @@ async function callDirectWebSearch({
 			"tool",
 			`direct_search name=web_search chars=${JSON.stringify(result).length} compact_chars=${JSON.stringify(compactResult).length} preview=${JSON.stringify(compactText(JSON.stringify(compactResult)))}`,
 		);
-		onToolResult?.({
-			type: "tool_result",
-			...summarizeToolResults({
-				calls: [{ name: "web_search", arguments: { query: prompt } }],
-				results: [{ name: "web_search", result }],
-			}),
+		const toolResultSummary = summarizeToolResults({
+			calls: [{ name: "web_search", arguments: { query: prompt } }],
+			results: [{ name: "web_search", result }],
 		});
+		if (toolResultSummary) {
+			onToolResult?.({
+				type: "tool_result",
+				...toolResultSummary,
+			});
+		}
 		return compactResult;
 	} finally {
 		onToolActivity?.({ active: false, name: "web_search" });
@@ -119,7 +122,25 @@ function compactToolResultForModel(entry) {
 		arguments: entry.arguments,
 		name: entry.name,
 		result: compactToolPayloadForModel(entry.result),
+		status: toolResultStatus(entry.result),
 	};
+}
+
+function toolResultStatus(result) {
+	const errorCode = compactText(result?.error?.code, 80);
+	if (errorCode) return { kind: "error", code: errorCode };
+	if (hasReadableToolPayload(result)) return { kind: "found" };
+	return { kind: "empty" };
+}
+
+function hasReadableToolPayload(result) {
+	if (!result || typeof result !== "object") return false;
+	if (compactText(result.title) || compactText(result.content)) return true;
+	return (
+		compactSectionsForModel(result.sections).length > 0 ||
+		compactResultItemsForModel(result.results).length > 0 ||
+		compactSourcesForModel(result.sources).length > 0
+	);
 }
 
 function compactToolPayloadForModel(result) {
@@ -271,7 +292,7 @@ export async function prepareDirectToolResultMessages({
 }) {
 	return await prepareSingleToolMessages({
 		finalInstruction:
-			"Сформулируй финальный голосовой ответ только на основе результата инструмента. Если result.sections, result.results или result.sources не пустые, инструмент нашел задачу; не говори, что задача не найдена. Для Tracker не читай Context дословно: кратко суммируй суть задачи и текущее решение в одном-двух предложениях. About используй как название, Context сожми до смысла, Latest decision добавь только если он есть. Если result.error.code=unauthorized или result.error.code=forbidden, скажи, что Яндекс Трекер отклонил запрос из-за доступа или авторизации. Если результата нет, скажи, что не удалось надежно проверить. Не произноси JSON, XML, URL или технические имена инструментов.",
+			"Сформулируй финальный голосовой ответ только на основе результата инструмента. Используй results[].status как источник статуса: status.kind=found значит инструмент нашел результат; status.kind=empty значит надежного результата нет; status.kind=error с code=unauthorized или code=forbidden значит Яндекс Трекер отклонил запрос из-за доступа или авторизации. Для Tracker кратко суммируй About, Context и Latest decision в одном-двух предложениях, не читая Context дословно. Не произноси JSON, XML, URL или технические имена инструментов.",
 		history,
 		prompt,
 		runtimeContext,
@@ -390,10 +411,13 @@ async function callTools({
 		}
 	}
 	if (results.length > 0) {
-		onToolResult?.({
-			type: "tool_result",
-			...summarizeToolResults({ calls, results }),
-		});
+		const toolResultSummary = summarizeToolResults({ calls, results });
+		if (toolResultSummary) {
+			onToolResult?.({
+				type: "tool_result",
+				...toolResultSummary,
+			});
+		}
 	}
 	return results;
 }
@@ -426,18 +450,10 @@ export async function prepareToolAugmentedMessages({
 		throw new Error("Selected tool route has no available tools.");
 	if (!toolManager.enabled) throw new Error("Selected tool route is disabled.");
 	if (rounds <= 0) {
-		const compactResult = await callDirectWebSearch({
-			prompt,
-			signal,
-			toolManager,
-			onToolActivity,
-			onToolResult,
-		});
-		appendDirectWebSearchResultMessage(baseMessages, compactResult);
 		baseMessages.push({
 			role: "user",
 			content:
-				"Сформулируй финальный голосовой ответ только на основе результатов поиска. Если verified=false или результатов нет, скажи, что не удалось надежно проверить. Не отвечай из памяти.",
+				"Подходящий инструмент не был вызван. Кратко скажи, что не удалось выполнить запрос через доступные инструменты, и не угадывай результат.",
 		});
 		return baseMessages;
 	}
@@ -489,26 +505,10 @@ export async function prepareToolAugmentedMessages({
 	}
 
 	if (!usedTool) {
-		if (!toolManager.tools.some((tool) => tool.name === "web_search")) {
-			baseMessages.push({
-				role: "user",
-				content:
-					"Подходящий инструмент не был вызван. Кратко скажи, что не удалось выполнить запрос через доступные инструменты, и не угадывай результат.",
-			});
-			return baseMessages;
-		}
-		const compactResult = await callDirectWebSearch({
-			prompt,
-			signal,
-			toolManager,
-			onToolActivity,
-			onToolResult,
-		});
-		appendDirectWebSearchResultMessage(baseMessages, compactResult);
 		baseMessages.push({
 			role: "user",
 			content:
-				"Сформулируй финальный голосовой ответ только на основе результатов поиска. Если verified=false или результатов нет, скажи, что не удалось надежно проверить. Не отвечай из памяти.",
+				"Подходящий инструмент не был вызван. Кратко скажи, что не удалось выполнить запрос через доступные инструменты, и не угадывай результат.",
 		});
 		return baseMessages;
 	}
