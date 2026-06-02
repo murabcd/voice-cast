@@ -5,6 +5,7 @@ import { sendJson } from "./wire.mjs";
 
 export function createTurnRuntime({
 	addHistory,
+	emitTurnLog: emitTurnLogRecord = emitTurnLog,
 	log,
 	resetToolActivity,
 	sendToolState,
@@ -26,7 +27,7 @@ export function createTurnRuntime({
 					turn: activeTurn,
 					sendToolState: (state) => sendToolState(activeTurn.ws, state),
 				});
-			emitTurnLog(activeTurn, "cancelled", {
+			emitTurnLogRecord(activeTurn, "cancelled", {
 				cancel_reason: reason,
 			});
 		}
@@ -87,7 +88,7 @@ export function createTurnRuntime({
 			"turn",
 			`done turn=${turn.id} elapsed_ms=${Date.now() - turn.startedAt} chars=${reply.length}`,
 		);
-		emitTurnLog(turn, "success");
+		emitTurnLogRecord(turn, "success");
 		resetToolActivity({
 			turn,
 			sendToolState: (state) => sendToolState(turn.ws, state),

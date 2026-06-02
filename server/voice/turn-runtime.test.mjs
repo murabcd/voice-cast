@@ -3,10 +3,13 @@ import { createTurnRuntime } from "./turn-runtime.mjs";
 
 function createRuntime() {
 	const history = [];
+	const turnLogs = [];
 	const sentToolStates = [];
 	const ttsCancels = [];
 	const runtime = createTurnRuntime({
 		addHistory: (_ws, item) => history.push(item),
+		emitTurnLog: (turn, outcome, fields = {}) =>
+			turnLogs.push({ fields, outcome, turnId: turn.id }),
 		log: () => undefined,
 		resetToolActivity: ({ sendToolState }) =>
 			sendToolState({ active: false, name: "web_search" }),
@@ -14,7 +17,7 @@ function createRuntime() {
 		setHearing: (ws) => ws.sent.push({ type: "state", phase: "hearing" }),
 		tts: { cancel: (reason) => ttsCancels.push(reason) },
 	});
-	return { history, runtime, sentToolStates, ttsCancels };
+	return { history, runtime, sentToolStates, ttsCancels, turnLogs };
 }
 
 function createOpenWs() {
@@ -29,10 +32,10 @@ function createOpenWs() {
 
 describe("turn runtime", () => {
 	it("waits for queued speech after the LLM is done", () => {
-		const { runtime } = createRuntime();
+		const { history, runtime, turnLogs } = createRuntime();
 		const ws = createOpenWs();
 		const { turn } = runtime.begin({
-			createLogEvent: () => ({}),
+			createLogEvent: () => ({ event: "voice_turn" }),
 			startedAt: 100,
 			transcript: "hello",
 			ws,
@@ -45,12 +48,14 @@ describe("turn runtime", () => {
 		expect(runtime.completeIfReady(turn)).toBe(false);
 		expect(runtime.finishQueuedSpeech(turn)).toBe(0);
 		expect(runtime.completeIfReady(turn)).toBe(true);
+		expect(history).toEqual([{ assistant: "First.", user: "hello" }]);
+		expect(turnLogs).toEqual([{ fields: {}, outcome: "success", turnId: 0 }]);
 	});
 
 	it("tracks multiple speech requests and clamps extra finishes", () => {
 		const { runtime } = createRuntime();
 		const { turn } = runtime.begin({
-			createLogEvent: () => ({}),
+			createLogEvent: () => ({ event: "voice_turn" }),
 			startedAt: 100,
 			transcript: "hello",
 			ws: createOpenWs(),
@@ -65,9 +70,9 @@ describe("turn runtime", () => {
 	});
 
 	it("rejects stale turns after cancellation or replacement", () => {
-		const { runtime } = createRuntime();
+		const { runtime, turnLogs, ttsCancels } = createRuntime();
 		const oldTurn = runtime.begin({
-			createLogEvent: () => ({}),
+			createLogEvent: () => ({ event: "voice_turn" }),
 			startedAt: 100,
 			transcript: "old",
 			ws: createOpenWs(),
@@ -76,9 +81,17 @@ describe("turn runtime", () => {
 		expect(runtime.accepts(oldTurn)).toBe(true);
 		runtime.cancel("replacement");
 		expect(runtime.accepts(oldTurn)).toBe(false);
+		expect(ttsCancels).toEqual(["replacement"]);
+		expect(turnLogs).toEqual([
+			{
+				fields: { cancel_reason: "replacement" },
+				outcome: "cancelled",
+				turnId: 0,
+			},
+		]);
 
 		const newTurn = runtime.begin({
-			createLogEvent: () => ({}),
+			createLogEvent: () => ({ event: "voice_turn" }),
 			startedAt: 200,
 			transcript: "new",
 			ws: createOpenWs(),

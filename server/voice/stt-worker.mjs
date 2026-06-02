@@ -13,9 +13,19 @@ export class SttWorker {
 		this.onExit = onExit;
 		this.stdout = "";
 		this.stopped = false;
+		this.stdinClosed = false;
 		this.proc = spawn(bin, [modelDir], { stdio: ["pipe", "pipe", "pipe"] });
 		this.proc.stdout.on("data", (chunk) => this.handleStdout(chunk));
 		this.proc.stderr.on("data", (chunk) => logChildLines("stt", chunk));
+		this.proc.stdin.on("error", (error) => {
+			this.stdinClosed = true;
+			if (error.code === "EPIPE" || this.stopped || this.proc.killed) return;
+			log("stt", `worker stdin error: ${error.message}`);
+			this.onEvent({ type: "error", message: error.message });
+		});
+		this.proc.stdin.on("close", () => {
+			this.stdinClosed = true;
+		});
 		this.proc.on("error", (error) => {
 			log("stt", `worker error: ${error.message}`);
 			this.onEvent({ type: "error", message: error.message });
@@ -46,7 +56,12 @@ export class SttWorker {
 	}
 
 	pushPcm(buffer) {
-		if (!this.proc.stdin || this.proc.stdin.destroyed || this.proc.killed)
+		if (
+			this.stdinClosed ||
+			!this.proc.stdin ||
+			this.proc.stdin.destroyed ||
+			this.proc.killed
+		)
 			return false;
 		const header = Buffer.allocUnsafe(4);
 		header.writeUInt32LE(buffer.byteLength, 0);

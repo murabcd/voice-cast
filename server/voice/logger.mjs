@@ -1,10 +1,52 @@
-import { appendFileSync, mkdirSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { join } from "node:path";
+import pino from "pino";
 
 const logDir = join(process.cwd(), "logs");
 mkdirSync(logDir, { recursive: true });
 const sessionId = new Date().toISOString().replaceAll(/[:.]/g, "-");
 const sessionLogPath = join(logDir, `voice-${sessionId}.log`);
+const base = {
+	pid: process.pid,
+	session_id: sessionId,
+	service: "voice-server",
+};
+const pinoOptions = {
+	base,
+	formatters: {
+		level: (label) => ({ level: label }),
+	},
+	messageKey: "message",
+	timestamp: () => `,"ts":"${new Date().toISOString()}"`,
+};
+
+const stdoutStream = pino.destination({ dest: 1, sync: false });
+const fileStream = pino.destination({
+	dest: sessionLogPath,
+	mkdir: true,
+	sync: false,
+});
+const logger = pino(
+	pinoOptions,
+	pino.multistream([
+		{ level: "trace", stream: stdoutStream },
+		{ level: "trace", stream: fileStream },
+	]),
+);
+
+stdoutStream.on("error", (error) => {
+	fileStream.write(
+		`${JSON.stringify({
+			level: "warn",
+			ts: new Date().toISOString(),
+			...base,
+			event: "stdout_error",
+			error_code: error?.code,
+			error_message: error?.message,
+			message: "stdout logging failed",
+		})}\n`,
+	);
+});
 
 function normalizeError(error) {
 	if (error instanceof Error)
@@ -17,17 +59,8 @@ function normalizeError(error) {
 }
 
 function writeRecord(record) {
-	const logRecord = {
-		ts: new Date().toISOString(),
-		level: record.level ?? "info",
-		session_id: sessionId,
-		service: "voice-server",
-		pid: process.pid,
-		...record,
-	};
-	const line = JSON.stringify(logRecord);
-	console.log(line);
-	appendFileSync(sessionLogPath, `${line}\n`);
+	const { level = "info", message, ...fields } = record;
+	logger[level](fields, message);
 }
 
 export function log(scope, message, fields = {}) {
