@@ -1,7 +1,10 @@
-import { Check, ChevronLeft, ChevronRight } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, LoaderCircle } from "lucide-react";
 import type React from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { characters } from "./app-data";
+import type { Character } from "./app-types";
 
 interface PickScreenProps {
 	canScrollLeft: boolean;
@@ -47,25 +50,12 @@ export function PickScreen({
 					{characters.map((character) => {
 						const isSelected = selectedId === character.id;
 						return (
-							<Button
-								type="button"
-								variant="ghost"
-								className="character-option"
+							<CharacterOption
+								character={character}
+								isSelected={isSelected}
 								key={character.id}
-								onClick={() => onSelect(character.id)}
-							>
-								<span
-									className={`character-card ${isSelected ? "selected" : ""}`}
-								>
-									<img src={character.image} alt={character.name} />
-									{isSelected && (
-										<span className="selected-check">
-											<Check />
-										</span>
-									)}
-								</span>
-								<span>{character.name}</span>
-							</Button>
+								onSelect={onSelect}
+							/>
 						);
 					})}
 				</div>
@@ -84,5 +74,46 @@ export function PickScreen({
 				Save character
 			</Button>
 		</section>
+	);
+}
+
+function CharacterOption({
+	character,
+	isSelected,
+	onSelect,
+}: {
+	character: Character;
+	isSelected: boolean;
+	onSelect: (id: number) => void;
+}) {
+	const [loaded, setLoaded] = useState(false);
+
+	return (
+		<Button
+			type="button"
+			variant="ghost"
+			className="character-option"
+			onClick={() => onSelect(character.id)}
+		>
+			<span className={`character-card ${isSelected ? "selected" : ""}`}>
+				{!loaded && (
+					<Skeleton className="character-card-skeleton" aria-hidden="true">
+						<LoaderCircle className="character-card-loader" />
+					</Skeleton>
+				)}
+				<img
+					src={character.image}
+					alt={character.name}
+					className={loaded ? "is-loaded" : ""}
+					onLoad={() => setLoaded(true)}
+				/>
+				{isSelected && (
+					<span className="selected-check">
+						<Check />
+					</span>
+				)}
+			</span>
+			<span>{character.name}</span>
+		</Button>
 	);
 }
