@@ -91,11 +91,6 @@ textarea:not(:disabled) {
 	background: #fff;
 	color: #050505;
 	--source-panel-width: 256px;
-	transition: padding-right 200ms linear;
-}
-
-.app-shell.has-source-panel {
-	padding-right: var(--source-panel-width);
 }
 
 .brand {
@@ -392,6 +387,14 @@ textarea:not(:disabled) {
 }
 
 @media (min-width: 900px) {
+	.app-shell {
+		transition: padding-right 200ms linear;
+	}
+
+	.app-shell.has-source-panel {
+		padding-right: var(--source-panel-width);
+	}
+
 	.app-shell.has-source-panel .sources-button {
 		right: calc(var(--source-panel-width) + 28px);
 	}
