@@ -5,8 +5,14 @@ import type {
 	Phase,
 	SettingsState,
 } from "./app-types";
+import { createBargeInDetector } from "./barge-in-detector";
 import { useAvatarAnimation } from "./use-avatar-animation";
 import { castAgent } from "./voice-agent-config";
+import {
+	downsampleTo16k,
+	floatToPcm16,
+	pcm16ToFloat,
+} from "./voice-audio-codec";
 import {
 	ttsFrameAudio,
 	ttsFrameDone,
@@ -24,39 +30,6 @@ interface UseVoiceSessionOptions {
 	selectedCharacterPrompt: string;
 	selectedLanguage: LanguageOption;
 	settings: SettingsState;
-}
-
-function downsampleTo16k(input: Float32Array, sampleRate: number) {
-	if (sampleRate === 16000) return input;
-	const ratio = sampleRate / 16000;
-	const length = Math.max(1, Math.floor(input.length / ratio));
-	const output = new Float32Array(length);
-	for (let i = 0; i < length; i += 1) {
-		const start = Math.floor(i * ratio);
-		const end = Math.min(input.length, Math.floor((i + 1) * ratio));
-		let sum = 0;
-		for (let j = start; j < end; j += 1) sum += input[j];
-		output[i] = sum / Math.max(1, end - start);
-	}
-	return output;
-}
-
-function floatToPcm16(samples: Float32Array) {
-	const bytes = new ArrayBuffer(samples.length * 2);
-	const view = new DataView(bytes);
-	for (let i = 0; i < samples.length; i += 1) {
-		const sample = Math.max(-1, Math.min(1, samples[i]));
-		view.setInt16(i * 2, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
-	}
-	return bytes;
-}
-
-function pcm16ToFloat(bytes: Uint8Array) {
-	const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-	const out = new Float32Array(bytes.byteLength / 2);
-	for (let i = 0; i < out.length; i += 1)
-		out[i] = view.getInt16(i * 2, true) / 0x8000;
-	return out;
 }
 
 function getPlaybackSources(
@@ -98,9 +71,13 @@ export function useVoiceSession({
 	const playbackAnalyserRef = React.useRef<AnalyserNode | null>(null);
 	const outputActiveRef = React.useRef(false);
 	const serverPhaseRef = React.useRef<Phase>("idle");
-	const bargeFramesRef = React.useRef(0);
-	const bargeInSentRef = React.useRef(false);
-	const bargeInReleasedUntilRef = React.useRef(0);
+	const bargeInRef = React.useRef(
+		createBargeInDetector({
+			framesRequired: bargeInFramesRequired,
+			releaseMs: bargeInReleaseMs,
+			rmsThreshold: bargeInRmsThreshold,
+		}),
+	);
 
 	const stopPlayback = React.useCallback(async () => {
 		outputActiveRef.current = false;
@@ -196,9 +173,7 @@ export function useVoiceSession({
 			setWebSearchActive(false);
 			sttReadyRef.current = false;
 			serverPhaseRef.current = "idle";
-			bargeFramesRef.current = 0;
-			bargeInSentRef.current = false;
-			bargeInReleasedUntilRef.current = 0;
+			bargeInRef.current.reset();
 			setPhase("idle");
 		},
 		[stopPlayback],
@@ -224,27 +199,12 @@ export function useVoiceSession({
 				outputActiveRef.current ||
 				serverPhaseRef.current === "speaking" ||
 				serverPhaseRef.current === "thinking";
-
-			if (assistantActive) {
-				if (rms > bargeInRmsThreshold) {
-					bargeFramesRef.current += 1;
-					if (
-						!bargeInSentRef.current &&
-						bargeFramesRef.current >= bargeInFramesRequired
-					) {
-						bargeInSentRef.current = true;
-						bargeInReleasedUntilRef.current =
-							performance.now() + bargeInReleaseMs;
-						ws.send(JSON.stringify({ type: "barge_in" }));
-						void stopPlayback();
-					}
-				} else {
-					bargeFramesRef.current = Math.max(0, bargeFramesRef.current - 1);
-				}
-				if (!bargeInSentRef.current) return;
+			const bargeIn = bargeInRef.current.evaluate({ assistantActive, rms });
+			if (bargeIn.shouldSendBargeIn) {
+				ws.send(JSON.stringify({ type: "barge_in" }));
+				void stopPlayback();
 			}
-
-			if (performance.now() < bargeInReleasedUntilRef.current) return;
+			if (!bargeIn.allowMicFrame) return;
 			ws.send(floatToPcm16(downsampleTo16k(input, micContext.sampleRate)));
 		},
 		[stopPlayback, updateListeningMeter],
@@ -298,9 +258,7 @@ export function useVoiceSession({
 			if (msg.type === "state") {
 				serverPhaseRef.current = msg.phase;
 				if (msg.phase === "thinking" || msg.phase === "speaking") {
-					bargeFramesRef.current = 0;
-					bargeInSentRef.current = false;
-					bargeInReleasedUntilRef.current = 0;
+					bargeInRef.current.reset();
 				}
 				setPhase(
 					outputActiveRef.current && msg.phase === "hearing"
@@ -311,9 +269,7 @@ export function useVoiceSession({
 			if (msg.type === "turn_done") {
 				setWebSearchActive(false);
 				serverPhaseRef.current = "hearing";
-				bargeFramesRef.current = 0;
-				bargeInSentRef.current = false;
-				bargeInReleasedUntilRef.current = 0;
+				bargeInRef.current.reset();
 				if (!outputActiveRef.current) setPhase("hearing");
 			}
 		},
@@ -348,9 +304,7 @@ export function useVoiceSession({
 				}),
 			);
 			serverPhaseRef.current = "warming";
-			bargeFramesRef.current = 0;
-			bargeInSentRef.current = false;
-			bargeInReleasedUntilRef.current = 0;
+			bargeInRef.current.reset();
 			setPhase("warming");
 			micStreamRef.current = await navigator.mediaDevices.getUserMedia({
 				audio: {

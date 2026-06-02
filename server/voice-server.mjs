@@ -17,22 +17,13 @@ import {
 } from "./voice/session-history.mjs";
 import { normalizeRussianSpeechText } from "./voice/speech-normalization.mjs";
 import { createStaticServer } from "./voice/static-server.mjs";
-import { SttWorker } from "./voice/stt-worker.mjs";
+import { createSttSession } from "./voice/stt-session.mjs";
 import { SupertonicTtsWorker } from "./voice/supertonic-tts-worker.mjs";
 import { cleanLlmText, createSentenceChunker } from "./voice/text.mjs";
 import {
 	createToolActivityHandler,
 	resetToolActivity,
 } from "./voice/tool-activity.mjs";
-import {
-	appendReply,
-	canAcceptTurn,
-	createTurn,
-	finishSpeech,
-	isTurnComplete,
-	markLlmDone,
-	queueSpeech,
-} from "./voice/turn-lifecycle.mjs";
 import {
 	createTurnLog,
 	emitIgnoredTurnLog,
@@ -42,6 +33,7 @@ import {
 	recordToolCall,
 	recordToolPreamble,
 } from "./voice/turn-logging.mjs";
+import { createTurnRuntime } from "./voice/turn-runtime.mjs";
 import {
 	sampleRatePayload,
 	sendBinary,
@@ -75,32 +67,10 @@ const server = createStaticServer(config);
 const wss = new WebSocketServer({ server });
 
 let activeClient;
-let activeAbort;
-let activeTurnId = 0;
-let activeTurn;
 let shuttingDown = false;
 
 const clientSettings = new WeakMap();
 const clientHistory = new WeakMap();
-
-function cancelTurn(reason) {
-	if (activeTurn) {
-		if (activeTurn.ws.readyState === WebSocket.OPEN)
-			resetToolActivity({
-				turn: activeTurn,
-				sendToolState: (state) =>
-					sendJson(activeTurn.ws, { type: "web_search", ...state }),
-			});
-		emitTurnLog(activeTurn, "cancelled", {
-			cancel_reason: reason,
-		});
-	}
-	activeTurnId += 1;
-	activeAbort?.abort();
-	activeAbort = undefined;
-	activeTurn = undefined;
-	tts.cancel(reason);
-}
 
 function closeClient(ws, code, reason) {
 	try {
@@ -108,31 +78,14 @@ function closeClient(ws, code, reason) {
 	} catch {}
 }
 
-function maybeCompleteTurn(turn) {
-	if (
-		turn !== activeTurn ||
-		!isTurnComplete(turn) ||
-		turn.ws.readyState !== WebSocket.OPEN
-	)
-		return;
-	log(
-		"turn",
-		`done turn=${turn.id} elapsed_ms=${Date.now() - turn.startedAt} chars=${cleanLlmText(turn.reply).length}`,
-	);
-	emitTurnLog(turn, "success");
-	resetToolActivity({
-		turn,
-		sendToolState: (state) =>
-			sendJson(turn.ws, { type: "web_search", ...state }),
-	});
-	clientHistory.get(turn.ws)?.add({
-		user: turn.userTranscript,
-		assistant: cleanLlmText(turn.reply),
-	});
-	sendJson(turn.ws, { type: "turn_done", reply: cleanLlmText(turn.reply) });
-	sendJson(turn.ws, { type: "state", phase: "hearing" });
-	activeTurn = undefined;
-}
+const turnRuntime = createTurnRuntime({
+	addHistory: (ws, item) => clientHistory.get(ws)?.add(item),
+	log,
+	resetToolActivity,
+	sendToolState: (ws, state) => sendJson(ws, { type: "web_search", ...state }),
+	setHearing: (ws) => sendJson(ws, { type: "state", phase: "hearing" }),
+	tts,
+});
 
 function speakSentence(turn, sentence) {
 	const text = cleanLlmText(sentence);
@@ -142,12 +95,12 @@ function speakSentence(turn, sentence) {
 	if (
 		!text ||
 		!spokenText ||
-		!canAcceptTurn(activeTurn, turn, activeTurnId) ||
+		!turnRuntime.accepts(turn) ||
 		turn.ws.readyState !== WebSocket.OPEN
 	)
 		return;
 	const queuedAt = Date.now();
-	const speechIndex = queueSpeech(turn);
+	const speechIndex = turnRuntime.queue(turn);
 	recordQueuedSpeech({
 		turn,
 		text,
@@ -164,7 +117,7 @@ function speakSentence(turn, sentence) {
 			lang: settings.language,
 			voiceName: settings.voiceName,
 			onStart: (sampleRate) => {
-				if (canAcceptTurn(activeTurn, turn, activeTurnId)) {
+				if (turnRuntime.accepts(turn)) {
 					recordFirstTtsAudio(turn);
 					log(
 						"tts",
@@ -175,45 +128,44 @@ function speakSentence(turn, sentence) {
 				}
 			},
 			onAudio: (pcm) => {
-				if (canAcceptTurn(activeTurn, turn, activeTurnId))
-					sendBinary(turn.ws, ttsFrameAudio, pcm);
+				if (turnRuntime.accepts(turn)) sendBinary(turn.ws, ttsFrameAudio, pcm);
 			},
 			onDone: () => {
-				if (!canAcceptTurn(activeTurn, turn, activeTurnId)) return;
-				finishSpeech(turn);
+				if (!turnRuntime.accepts(turn)) return;
+				turnRuntime.finishQueuedSpeech(turn);
 				log(
 					"tts",
 					`audio_done turn=${turn.id} speech=${speechIndex} pending=${turn.pendingSpeech} elapsed_ms=${Date.now() - queuedAt} turn_latency_ms=${Date.now() - turn.startedAt}`,
 				);
 				sendBinary(turn.ws, ttsFrameDone);
-				maybeCompleteTurn(turn);
+				turnRuntime.completeIfReady(turn);
 			},
 			onError: (message) => {
-				if (canAcceptTurn(activeTurn, turn, activeTurnId)) {
-					finishSpeech(turn);
+				if (turnRuntime.accepts(turn)) {
+					turnRuntime.finishQueuedSpeech(turn);
 					sendBinary(turn.ws, ttsFrameError, Buffer.from(message, "utf8"));
 					sendJson(turn.ws, { type: "error", message });
-					maybeCompleteTurn(turn);
+					turnRuntime.completeIfReady(turn);
 				}
 			},
 		});
 	} catch (error) {
-		finishSpeech(turn);
+		turnRuntime.finishQueuedSpeech(turn);
 		sendJson(turn.ws, {
 			type: "error",
 			message: error instanceof Error ? error.message : String(error),
 		});
-		maybeCompleteTurn(turn);
+		turnRuntime.completeIfReady(turn);
 	}
 }
 
 function completeImmediateReply(turn, reply) {
-	appendReply(turn, reply);
+	turnRuntime.append(turn, reply);
 	sendJson(turn.ws, { type: "reply_delta", text: reply });
 	sendJson(turn.ws, { type: "done", reply });
 	speakSentence(turn, reply);
-	markLlmDone(turn);
-	maybeCompleteTurn(turn);
+	turnRuntime.markDone(turn);
+	turnRuntime.completeIfReady(turn);
 }
 
 async function handleFinal(ws, transcript) {
@@ -231,30 +183,26 @@ async function handleFinal(ws, transcript) {
 		sendJson(ws, { type: "state", phase: "hearing" });
 		return;
 	}
-	cancelTurn("new final");
-	const turnId = activeTurnId;
-	const controller = new AbortController();
-	activeAbort = controller;
+	turnRuntime.cancel("new final");
 	const chunker = createSentenceChunker();
 	let firstDeltaAt = 0;
 	const startedAt = Date.now();
 	const settings = clientSettings.get(ws) ?? {};
 	const history = clientHistory.get(ws) ?? createSessionHistory();
-	const turn = createTurn({
-		id: turnId,
-		startedAt,
-		ws,
-	});
-	turn.userTranscript = normalizedTranscript;
-	turn.logEvent = createTurnLog({
-		turnId,
+	const { controller, turn, turnId } = turnRuntime.begin({
 		startedAt,
 		transcript: normalizedTranscript,
-		settings,
-		config,
+		ws,
+		createLogEvent: (newTurn) =>
+			createTurnLog({
+				turnId: newTurn.id,
+				startedAt,
+				transcript: normalizedTranscript,
+				settings,
+				config,
+			}),
 	});
 	turn.logEvent.history_turns = history.size();
-	activeTurn = turn;
 
 	sendJson(ws, { type: "transcript", text: normalizedTranscript });
 	sendJson(ws, { type: "state", phase: "thinking" });
@@ -289,17 +237,7 @@ async function handleFinal(ws, transcript) {
 			signal: controller.signal,
 			toolManager: webTools,
 			turnId,
-			onPreamble: (sentence) => {
-				recordToolPreamble({ turn, sentence, startedAt });
-				speakSentence(turn, sentence);
-			},
-			onToolActivity: createToolActivityHandler({
-				turn,
-				canAccept: () => canAcceptTurn(activeTurn, turn, activeTurnId),
-				recordToolCall,
-				sendToolState: (state) =>
-					sendJson(ws, { type: "web_search", ...state }),
-			}),
+			onEvent: createToolPlanningEventHandler({ startedAt, turn, ws }),
 		});
 		if (messages?.kind === "direct_reply") {
 			completeImmediateReply(turn, messages.reply);
@@ -317,7 +255,7 @@ async function handleFinal(ws, transcript) {
 			topP: settings.topP ?? config.llama.topP,
 			repeatPenalty: settings.repeatPenalty ?? config.llama.repeatPenalty,
 		})) {
-			if (!canAcceptTurn(activeTurn, turn, activeTurnId)) return;
+			if (!turnRuntime.accepts(turn)) return;
 			if (!firstDeltaAt) {
 				firstDeltaAt = Date.now();
 				turn.logEvent.first_delta_ms = firstDeltaAt - startedAt;
@@ -326,22 +264,22 @@ async function handleFinal(ws, transcript) {
 					`first_delta turn=${turnId} latency_ms=${firstDeltaAt - startedAt}`,
 				);
 			}
-			appendReply(turn, delta);
+			turnRuntime.append(turn, delta);
 			sendJson(ws, { type: "reply_delta", text: delta });
 			for (const sentence of chunker.push(delta)) speakSentence(turn, sentence);
 		}
-		if (!canAcceptTurn(activeTurn, turn, activeTurnId)) return;
+		if (!turnRuntime.accepts(turn)) return;
 		log(
 			"llm",
 			`done turn=${turnId} elapsed_ms=${Date.now() - startedAt} chars=${cleanLlmText(turn.reply).length}`,
 		);
 		for (const sentence of chunker.flush()) speakSentence(turn, sentence);
-		markLlmDone(turn);
+		turnRuntime.markDone(turn);
 		sendJson(ws, { type: "done", reply: cleanLlmText(turn.reply) });
-		maybeCompleteTurn(turn);
+		turnRuntime.completeIfReady(turn);
 	} catch (error) {
 		if (error instanceof Error && error.name === "AbortError") return;
-		if (turn === activeTurn) activeTurn = undefined;
+		turnRuntime.clearIfActive(turn);
 		emitTurnLog(turn, "error", {
 			...(error instanceof Error
 				? { error_name: error.name, error_message: error.message }
@@ -355,8 +293,25 @@ async function handleFinal(ws, transcript) {
 		});
 		sendJson(ws, { type: "state", phase: "hearing" });
 	} finally {
-		if (activeAbort === controller) activeAbort = undefined;
+		turnRuntime.clearAbort(controller);
 	}
+}
+
+function createToolPlanningEventHandler({ startedAt, turn, ws }) {
+	const handleToolActivity = createToolActivityHandler({
+		turn,
+		canAccept: () => turnRuntime.accepts(turn),
+		recordToolCall,
+		sendToolState: (state) => sendJson(ws, { type: "web_search", ...state }),
+	});
+	return (event) => {
+		if (event.type === "preamble") {
+			recordToolPreamble({ turn, sentence: event.sentence, startedAt });
+			speakSentence(turn, event.sentence);
+			return;
+		}
+		if (event.type === "tool_activity") handleToolActivity(event);
+	};
 }
 
 wss.on("connection", (ws) => {
@@ -375,59 +330,23 @@ wss.on("connection", (ws) => {
 	sendJson(ws, { type: "status", text: "connected" });
 	sendJson(ws, { type: "state", phase: "warming" });
 
-	let sttSessionId = 0;
-	let sttReady = false;
-	let stt = startSttWorker();
-
-	function startSttWorker() {
-		sttSessionId += 1;
-		const sessionId = sttSessionId;
-		sttReady = false;
-		sendJson(ws, { type: "state", phase: "warming" });
-		sendJson(ws, { type: "stt_ready", ready: false });
-		return new SttWorker({
-			...config.stt,
-			onEvent: (event) => {
-				if (sessionId !== sttSessionId) return;
-				sendJson(ws, { type: "stt_event", event });
-				if (event.type === "ready") {
-					log(
-						"stt",
-						`ready session=${sessionId} sampleRate=${event.sampleRate} vadChunkMs=${event.vadChunkMs}`,
-					);
-					sttReady = true;
-					sendJson(ws, { type: "stt_ready", ready: true });
-					sendJson(ws, { type: "state", phase: "hearing" });
-				}
-				if (event.type === "error")
-					sendJson(ws, { type: "error", message: event.message });
-				if (event.type === "final" && event.text?.trim())
-					void handleFinal(ws, event.text.trim());
-			},
-			onExit: ({ stopped }) => {
-				if (
-					sessionId === sttSessionId &&
-					!stopped &&
-					ws.readyState === WebSocket.OPEN
-				)
-					sendJson(ws, { type: "error", message: "STT worker exited" });
-			},
-		});
-	}
-
-	function restartSttWorker(reason) {
-		log("stt", `restart reason=${reason}`);
-		stt.stop();
-		stt = startSttWorker();
-	}
+	const stt = createSttSession({
+		config: config.stt,
+		log,
+		onError: (message) => {
+			if (ws.readyState === WebSocket.OPEN)
+				sendJson(ws, { type: "error", message });
+		},
+		onEvent: (event) => sendJson(ws, { type: "stt_event", event }),
+		onFinal: (text) => void handleFinal(ws, text),
+		onPhase: (phase) => sendJson(ws, { type: "state", phase }),
+		onReady: (ready) => sendJson(ws, { type: "stt_ready", ready }),
+	});
 
 	ws.on("message", async (data, isBinary) => {
 		try {
 			if (isBinary) {
-				if (!sttReady) return;
-				const ok = stt.pushPcm(
-					Buffer.isBuffer(data) ? data : Buffer.from(data),
-				);
+				const ok = stt.pushPcm(data);
 				if (!ok)
 					sendJson(ws, { type: "warning", message: "STT input backpressure" });
 				return;
@@ -444,8 +363,8 @@ wss.on("connection", (ws) => {
 			}
 			if (msg.type === "barge_in") {
 				log("turn", "barge_in");
-				cancelTurn("barge-in");
-				restartSttWorker("barge-in");
+				turnRuntime.cancel("barge-in");
+				stt.restart("barge-in");
 				sendJson(ws, { type: "status", text: "barge-in" });
 			}
 		} catch (error) {
@@ -457,7 +376,7 @@ wss.on("connection", (ws) => {
 	});
 
 	ws.on("close", () => {
-		cancelTurn("client closed");
+		turnRuntime.cancel("client closed");
 		stt.stop();
 		if (activeClient === ws) activeClient = undefined;
 	});
@@ -471,7 +390,7 @@ function shutdown(signal) {
 	if (shuttingDown) return;
 	shuttingDown = true;
 	log("server", `shutting down on ${signal}`);
-	cancelTurn("server shutdown");
+	turnRuntime.cancel("server shutdown");
 	if (activeClient?.readyState === WebSocket.OPEN)
 		closeClient(activeClient, 1012, "Server is restarting");
 	wss.close();

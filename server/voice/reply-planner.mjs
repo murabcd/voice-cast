@@ -15,9 +15,11 @@ export async function planReply({
 	signal,
 	toolManager,
 	turnId,
-	onPreamble,
-	onToolActivity,
+	onEvent,
 }) {
+	const emit = (event) => onEvent?.(event);
+	const onToolActivity = (state) => emit({ type: "tool_activity", ...state });
+
 	const registry = buildVoiceToolRegistry({
 		settings,
 		webTools: toolManager,
@@ -31,8 +33,9 @@ export async function planReply({
 		"tool",
 		`selection kind=${plan.kind} category=${plan.category} tools=${plan.toolNames?.length ?? (plan.toolName ? 1 : 0)} web_enabled=${toolManager.enabled} user_enabled=${settings.webToolsEnabled ?? true}`,
 	);
+
 	if (plan.kind === "direct_tool") {
-		onToolActivity?.({ active: true, name: plan.toolName });
+		onToolActivity({ active: true, name: plan.toolName });
 		try {
 			const result = await registry.callTool(plan.toolName, plan.arguments, {
 				signal,
@@ -44,16 +47,23 @@ export async function planReply({
 				result: result.result,
 			};
 		} finally {
-			onToolActivity?.({ active: false, name: plan.toolName });
+			onToolActivity({ active: false, name: plan.toolName });
 		}
 	}
+
 	if (plan.kind !== "direct_web" && plan.kind !== "tool_assisted_llm")
 		return undefined;
+
 	const selectedToolManager = registry.toolManagerFor(plan.toolNames);
 	if (!selectedToolManager.enabled) return undefined;
-	const preamble = pickToolPreamble({ language: settings.language, turnId });
+
+	const preamble = pickToolPreamble({
+		language: settings.language,
+		turnId,
+	});
 	log("tool", `preamble turn=${turnId} text=${JSON.stringify(preamble)}`);
-	onPreamble?.(preamble);
+	emit({ type: "preamble", sentence: preamble });
+
 	if (plan.kind === "direct_web")
 		return await prepareDirectWebSearchMessages({
 			prompt,
@@ -63,6 +73,7 @@ export async function planReply({
 			toolManager: selectedToolManager,
 			onToolActivity,
 		});
+
 	return await prepareToolAugmentedMessages({
 		llamaUrl: config.llamaUrl,
 		prompt,
