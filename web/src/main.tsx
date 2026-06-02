@@ -11,8 +11,8 @@ import { useVoiceSession } from "./use-voice-session";
 import { castAgent } from "./voice-agent-config";
 import { WelcomeScreen } from "./welcome-screen";
 
-const selectedCharacterKey = "cast:selected-character";
-const selectedLanguageKey = "cast:selected-language";
+const selectedCharacterKey = "voice-cast:selected-character";
+const selectedLanguageKey = "voice-cast:selected-language";
 
 interface ViewState {
 	canScrollLeft: boolean;
@@ -189,7 +189,7 @@ function App() {
 				className="brand"
 				onClick={() => setView({ screen: "welcome" })}
 			>
-				<span>Cast</span>
+				<span>Voice Cast</span>
 			</Button>
 
 			{view.screen === "welcome" && (

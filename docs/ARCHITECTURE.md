@@ -1,6 +1,6 @@
 # Architecture
 
-Cast is a local speech-to-speech app with one maintained runtime path.
+Voice Cast is a local speech-to-speech app with one maintained runtime path.
 
 ## Runtime Flow
 
@@ -37,7 +37,7 @@ browser mic PCM
 - `server/voice-server.mjs` composes modules; focused modules should not import it.
 - Voice modules should stay single-purpose and expose small functions/classes.
 - `turn-runtime.mjs` owns active turn acceptance, cancellation, queued speech accounting, and history commit timing.
-- `session-history.mjs` owns compact memory and web-grounding metadata; prompt builders consume its messages, not its internal state.
+- `session-history.mjs` owns compact memory, rolling summaries, and web-grounding metadata; prompt builders consume its messages, not its internal state.
 - `tool-selector.mjs` owns turn-level routing decisions; policy files provide static matching data, and tool registry owns executable tool namespaces.
 - Tool code owns external API shapes and should return compact structured objects.
 - Model-facing tool schemas should keep invalid states small: use explicit required fields, `additionalProperties: false`, and server-owned defaults for caps or runtime context.
@@ -50,6 +50,7 @@ browser mic PCM
 - Only one active browser client is accepted at a time.
 - Empty, filler, silence, or background-noise transcripts do not create LLM turns.
 - Repeat requests replay the last committed assistant answer without a new tool or LLM turn.
+- Conversation memory keeps recent useful turns verbatim and rolls overflowed turns into a bounded system summary instead of silently dropping older context.
 - Tool routing is deterministic before generation: local date/time tools run before web, web routes are selected by `tool-selector.mjs`, and the final answer model does not silently override the selected route.
 - Every non-ignored turn records the selected route kind, category, selected tools, web-follow-up flag, and query length in its final `voice_turn` log event.
 - Web tools run only when enabled by settings and selected by the routing policy.

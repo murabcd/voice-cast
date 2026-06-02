@@ -57,7 +57,7 @@ function buildRuntimeInstructions({
 }
 
 export const castAgent: VoiceAgentConfig = {
-	name: "cast",
+	name: "voice-cast",
 	publicDescription:
 		"Local speech-to-speech assistant for talking with cartoon characters, with optional read-only web tools.",
 	defaultInstructions,

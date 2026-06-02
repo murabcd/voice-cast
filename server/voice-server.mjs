@@ -204,6 +204,8 @@ async function handleFinal(ws, transcript) {
 			}),
 	});
 	turn.logEvent.history_turns = history.size();
+	turn.logEvent.history_chars = history.messageChars();
+	turn.logEvent.summary_chars = history.summaryChars();
 
 	sendJson(ws, { type: "transcript", text: normalizedTranscript });
 	sendJson(ws, { type: "state", phase: "thinking" });

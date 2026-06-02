@@ -1,6 +1,6 @@
-<a href="#cast">
+<a href="#voice-cast">
   <img alt="Local speech-to-speech voice app for talking with cartoon characters." src="./web/public/cast.png">
-  <h1 align="center">Cast</h1>
+  <h1 align="center">Voice Cast</h1>
 </a>
 
 <p align="center">

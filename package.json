@@ -1,5 +1,5 @@
 {
-	"name": "cast",
+	"name": "voice-cast",
 	"version": "1.0.0",
 	"private": true,
 	"description": "Local Russian speech-to-speech app for talking with cartoon characters on Apple Silicon.",

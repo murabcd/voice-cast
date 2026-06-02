@@ -27,7 +27,7 @@ describe("session history", () => {
 		]);
 	});
 
-	it("keeps recent turns compact", () => {
+	it("keeps recent turns compact and summarizes overflow", () => {
 		const history = createSessionHistory();
 
 		for (let index = 0; index < 6; index += 1) {
@@ -38,10 +38,21 @@ describe("session history", () => {
 		}
 
 		expect(history.size()).toBe(4);
-		expect(history.messages()[0].content.startsWith("Вопрос 2")).toBe(true);
+		expect(history.summary()).toContain("Вопрос 0");
+		expect(history.summary()).toContain("Ответ 1");
+		expect(history.summaryChars()).toBeLessThanOrEqual(900);
+		expect(history.messages()[0].role).toBe("system");
+		expect(history.messages()[1].content.startsWith("Вопрос 2")).toBe(true);
 		expect(
 			history.messages().every((message) => message.content.length <= 360),
+		).toBe(false);
+		expect(
+			history
+				.messages()
+				.slice(1)
+				.every((message) => message.content.length <= 360),
 		).toBe(true);
+		expect(history.messageChars()).toBeGreaterThan(history.summaryChars());
 	});
 
 	it("tracks the latest web-grounded turn without exposing metadata as chat text", () => {
