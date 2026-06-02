@@ -79,7 +79,7 @@ function formatLocalToolReply({ language, location, toolName, value }) {
 			: `В ${location.names.ru} сегодня ${value}.`;
 }
 
-export const localDateTimeToolDefinitions = localDateTimeRoutes.map(
+const localDateTimeToolDefinitions = localDateTimeRoutes.map(
 	({ toolName, description, parameters }) => ({
 		name: toolName,
 		namespace: "local_datetime",

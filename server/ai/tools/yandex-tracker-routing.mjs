@@ -46,7 +46,7 @@ function resolveIssueQueue(value, { defaultQueue, knownQueues }) {
 	return normalizeQueue(defaultQueue);
 }
 
-export function extractYandexTrackerIssueKey(text, options = {}) {
+function extractYandexTrackerIssueKey(text, options = {}) {
 	const prompt = String(text ?? "");
 	const knownQueues = normalizeKnownQueues(options);
 	const direct = issueKeyPattern.exec(prompt)?.[0];

@@ -237,7 +237,8 @@ class TextToSpeech {
         const scalarShape = [bsz];
         const totalStepTensor = arrayToTensor(totalStepArray, scalarShape);
 
-        for (let step = 0; step < totalStep; step++) {
+        const vectorSteps = Array.from({ length: totalStep }, (_, step) => step);
+        await vectorSteps.reduce((previousStep, step) => previousStep.then(async () => {
             const currentStepArray = new Array(bsz).fill(step);
 
             const vectorEstResult = await this.vectorEstOrt.run({
@@ -261,7 +262,7 @@ class TextToSpeech {
                     }
                 }
             }
-        }
+        }), Promise.resolve());
 
         const vocoderResult = await this.vocoderOrt.run({
             latent: arrayToTensor(noisyLatent, latentShape)
@@ -279,9 +280,12 @@ class TextToSpeech {
         const textList = chunkText(text, maxLen);
         let wavCat = null;
         let durCat = 0;
-        
-        for (const chunk of textList) {
-            const { wav, duration } = await this._infer([chunk], [lang], style, totalStep, speed);
+
+        const chunkResults = await Promise.all(
+            textList.map((chunk) => this._infer([chunk], [lang], style, totalStep, speed))
+        );
+
+        for (const { wav, duration } of chunkResults) {
             
             if (wavCat === null) {
                 wavCat = wav;
@@ -457,7 +461,7 @@ function intArrayToTensor(array, dims) {
 /**
  * Write WAV file
  */
-export function writeWavFile(filename, audioData, sampleRate) {
+function writeWavFile(filename, audioData, sampleRate) {
     const numChannels = 1;
     const bitsPerSample = 16;
     const byteRate = sampleRate * numChannels * bitsPerSample / 8;
@@ -498,7 +502,7 @@ export function writeWavFile(filename, audioData, sampleRate) {
 /**
  * Timer utility for measuring execution time
  */
-export async function timer(name, fn) {
+async function timer(name, fn) {
     const start = Date.now();
     console.log(`${name}...`);
     const result = await fn();
@@ -510,7 +514,7 @@ export async function timer(name, fn) {
 /**
  * Sanitize filename by replacing non-alphanumeric characters with underscores (supports Unicode)
  */
-export function sanitizeFilename(text, maxLen) {
+function sanitizeFilename(text, maxLen) {
     const prefix = text.substring(0, maxLen);
     // \p{L} matches any Unicode letter, \p{N} matches any Unicode number
     return prefix.replace(/[^\p{L}\p{N}_]/gu, '_');
