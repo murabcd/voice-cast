@@ -21,7 +21,7 @@ browser mic PCM
 | UI | `web/src/main.tsx`, `web/src/pick-screen.tsx`, `web/src/welcome-screen.tsx`, `web/src/settings-dialog.tsx`, `web/src/styles.css` | Screens, controls, visual state. |
 | Browser runtime | `web/src/use-voice-session.ts`, `web/src/voice-wire.ts`, `web/src/tool-result-wire.ts`, `web/src/voice-audio-codec.ts`, `web/src/voice-agent-config.ts`, `web/src/use-avatar-animation.ts` | Mic capture, PCM encoding/decoding, playback, WebSocket protocol, tool result event validation, settings payload, active agent instructions, and avatar animation state. |
 | Server runtime | `server/voice-server.mjs` | Composition of HTTP/static serving, WebSocket sessions, STT/LLM/TTS/tool wiring, cancellation, and shutdown. |
-| Server support | `server/voice/static-server.mjs`, `server/voice/client-settings.mjs`, `server/voice/session-history.mjs`, `server/voice/turn-runtime.mjs`, `server/voice/turn-logging.mjs`, `server/voice/tool-activity.mjs`, `server/voice/tool-source-card.mjs`, `server/voice/wire.mjs` | Static dist serving, settings parsing, compact conversation memory, turn lifecycle state, structured logging, tool activity state, tool result source-card shaping, and wire encoding. |
+| Server support | `server/voice/static-server.mjs`, `server/voice/client-settings.mjs`, `server/voice/immediate-turn.mjs`, `server/voice/opening-turn.mjs`, `server/voice/session-history.mjs`, `server/voice/turn-runtime.mjs`, `server/voice/turn-logging.mjs`, `server/voice/tool-activity.mjs`, `server/voice/tool-source-card.mjs`, `server/voice/wire.mjs` | Static dist serving, settings parsing, immediate reply turn composition, startup greeting policy, compact conversation memory, turn lifecycle state, structured logging, tool activity state, tool result source-card shaping, and wire encoding. |
 | AI policy | `server/ai/prompts.mjs`, `web/src/voice-agent-config.ts` | Prompt shape and active agent instructions. |
 | Voice policy | `server/voice/policy/*.mjs`, `server/voice/realtime-voice-patterns.mjs` | Turn classification patterns, local tool policy, web route policy, pronunciation policy, silence/no-op handling, and tool preambles. |
 | LLM | `server/voice/llama.mjs`, `server/voice/tool-loop.mjs`, `server/voice/reply-planner.mjs` | llama.cpp requests, tool-call loop, direct web grounding, and reply planning. |
@@ -51,6 +51,7 @@ browser mic PCM
 
 - Barge-in cancels the active turn and restarts STT.
 - Only one active browser client is accepted at a time.
+- After the browser sends settings for a new session, the server starts one synthetic opening turn when auto greeting is enabled so the assistant speaks first; this turn uses normal TTS/cancellation plumbing but is not committed to conversation memory.
 - Empty, filler, silence, or background-noise transcripts do not create LLM turns.
 - Repeat requests replay the last committed assistant answer without a new tool or LLM turn.
 - Conversation memory keeps recent useful turns verbatim and rolls overflowed turns into a bounded system summary instead of silently dropping older context.

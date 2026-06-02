@@ -324,6 +324,7 @@ export function useVoiceSession({
 					topP: settings.topP,
 					repeatPenalty: settings.repeatPenalty,
 					webToolsEnabled: settings.webToolsEnabled,
+					autoGreetingEnabled: settings.autoGreetingEnabled,
 				}),
 			);
 			serverPhaseRef.current = "warming";
@@ -362,6 +363,7 @@ export function useVoiceSession({
 		selectedLanguage.code,
 		selectedLanguage.name,
 		selected.voiceName,
+		settings.autoGreetingEnabled,
 		settings.maxTokens,
 		settings.repeatPenalty,
 		settings.systemPrompt,

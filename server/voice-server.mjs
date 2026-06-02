@@ -5,8 +5,10 @@ import { McpTools } from "./ai/tools/mcp-tools.mjs";
 import { OllamaWebTools } from "./ai/tools/ollama-web-tools.mjs";
 import { parseClientSettingsMessage } from "./voice/client-settings.mjs";
 import { config } from "./voice/config.mjs";
+import { startImmediateTurn } from "./voice/immediate-turn.mjs";
 import { streamLlamaReply } from "./voice/llama.mjs";
 import { log, logError } from "./voice/logger.mjs";
+import { openingReplyForSettings } from "./voice/opening-turn.mjs";
 import {
 	shouldClarifyRussianTranscript,
 	shouldWaitForUser,
@@ -85,6 +87,7 @@ let shuttingDown = false;
 
 const clientSettings = new WeakMap();
 const clientHistory = new WeakMap();
+const clientOpeningStarted = new WeakSet();
 
 function closeClient(ws, code, reason) {
 	try {
@@ -181,6 +184,37 @@ function completeImmediateReply(turn, reply) {
 	speakSentence(turn, reply);
 	turnRuntime.markDone(turn);
 	turnRuntime.completeIfReady(turn);
+}
+
+function startOpeningTurn(ws) {
+	if (clientOpeningStarted.has(ws) || ws.readyState !== WebSocket.OPEN) return;
+	const settings = clientSettings.get(ws) ?? {};
+	if (!settings.autoGreetingEnabled) return;
+	const startedAt = Date.now();
+	clientOpeningStarted.add(ws);
+	if (turnRuntime.hasActive()) turnRuntime.cancel("opening turn");
+	const { turnId } = startImmediateTurn({
+		commitHistory: false,
+		log,
+		reply: openingReplyForSettings(settings),
+		sendJson,
+		speakSentence,
+		startedAt,
+		transcript: "[server opening]",
+		turnRuntime,
+		ws,
+		createLogEvent: (newTurn) => ({
+			...createTurnLog({
+				turnId: newTurn.id,
+				startedAt,
+				transcript: "[server opening]",
+				settings,
+				config,
+			}),
+			turn_source: "server_opening",
+		}),
+	});
+	log("turn", `start_opening turn=${turnId}`);
 }
 
 async function handleFinal(ws, transcript) {
@@ -381,8 +415,9 @@ wss.on("connection", (ws) => {
 				clientSettings.set(ws, parsed.settings);
 				log(
 					"settings",
-					`language=${parsed.logFields.language} voice=${parsed.logFields.voiceName} prompt=${JSON.stringify(parsed.logFields.systemPromptPreview)}`,
+					`language=${parsed.logFields.language} voice=${parsed.logFields.voiceName} auto_greeting=${parsed.logFields.autoGreetingEnabled} prompt=${JSON.stringify(parsed.logFields.systemPromptPreview)}`,
 				);
+				startOpeningTurn(ws);
 				return;
 			}
 			if (msg.type === "barge_in") {

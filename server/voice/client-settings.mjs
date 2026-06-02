@@ -15,8 +15,10 @@ export function parseClientSettingsMessage(msg) {
 	const maxTokens = Number(msg.maxTokens);
 	const language = String(msg.language ?? "").trim();
 	const voiceName = String(msg.voiceName ?? "").trim();
+	const autoGreetingEnabled = msg.autoGreetingEnabled !== false;
 	return {
 		settings: {
+			autoGreetingEnabled,
 			systemPrompt: String(msg.systemPrompt ?? "").trim(),
 			language: supertonicLanguages.has(language) ? language : undefined,
 			voiceName: supertonicVoiceNames.has(voiceName) ? voiceName : undefined,
@@ -29,6 +31,7 @@ export function parseClientSettingsMessage(msg) {
 		},
 		logFields: {
 			language,
+			autoGreetingEnabled,
 			voiceName,
 			systemPromptPreview: String(msg.systemPrompt ?? "").slice(0, 120),
 		},

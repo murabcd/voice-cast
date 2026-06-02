@@ -157,6 +157,36 @@ export function SettingsDialog({
 								</Select>
 							</Field>
 							<Field>
+								<FieldLabel htmlFor="auto-greeting-enabled">
+									Auto greeting
+								</FieldLabel>
+								<Select
+									value={settings.autoGreetingEnabled ? "on" : "off"}
+									onValueChange={(value) =>
+										onChange({
+											type: "setAutoGreetingEnabled",
+											value: value === "on",
+										})
+									}
+								>
+									<SelectTrigger
+										id="auto-greeting-enabled"
+										className="settings-select"
+									>
+										<SelectValue />
+									</SelectTrigger>
+									<SelectContent
+										position="popper"
+										className="settings-select-content"
+									>
+										<SelectGroup>
+											<SelectItem value="on">On</SelectItem>
+											<SelectItem value="off">Off</SelectItem>
+										</SelectGroup>
+									</SelectContent>
+								</Select>
+							</Field>
+							<Field>
 								<FieldLabel htmlFor="max-tokens">Max tokens</FieldLabel>
 								<Input
 									id="max-tokens"

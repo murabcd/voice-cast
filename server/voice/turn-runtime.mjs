@@ -20,6 +20,10 @@ export function createTurnRuntime({
 		return turn === activeTurn && turn.id === activeTurnId;
 	}
 
+	function hasActive() {
+		return Boolean(activeTurn);
+	}
+
 	function cancel(reason) {
 		if (activeTurn) {
 			if (activeTurn.ws.readyState === WebSocket.OPEN)
@@ -38,10 +42,17 @@ export function createTurnRuntime({
 		tts.cancel(reason);
 	}
 
-	function begin({ createLogEvent, startedAt, transcript, ws }) {
+	function begin({
+		commitHistory = true,
+		createLogEvent,
+		startedAt,
+		transcript,
+		ws,
+	}) {
 		const controller = new AbortController();
 		activeAbort = controller;
 		const turn = {
+			commitHistory,
 			id: activeTurnId,
 			llmDone: false,
 			pendingSpeech: 0,
@@ -93,16 +104,17 @@ export function createTurnRuntime({
 			turn,
 			sendToolState: (state) => sendToolState(turn.ws, state),
 		});
-		addHistory(turn.ws, {
-			user: turn.userTranscript,
-			assistant: reply,
-			metadata: {
-				usedWeb: (turn.logEvent.tool_names ?? []).some((name) =>
-					name.startsWith("web_"),
-				),
-				toolNames: turn.logEvent.tool_names ?? [],
-			},
-		});
+		if (turn.commitHistory)
+			addHistory(turn.ws, {
+				user: turn.userTranscript,
+				assistant: reply,
+				metadata: {
+					usedWeb: (turn.logEvent.tool_names ?? []).some((name) =>
+						name.startsWith("web_"),
+					),
+					toolNames: turn.logEvent.tool_names ?? [],
+				},
+			});
 		sendJson(turn.ws, { type: "turn_done", reply });
 		setHearing(turn.ws);
 		activeTurn = undefined;
@@ -126,6 +138,7 @@ export function createTurnRuntime({
 		clearIfActive,
 		completeIfReady,
 		finishQueuedSpeech,
+		hasActive,
 		markDone,
 		queue,
 	};

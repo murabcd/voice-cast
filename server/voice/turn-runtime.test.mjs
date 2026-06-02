@@ -22,6 +22,7 @@ function createRuntime() {
 
 function createOpenWs() {
 	return {
+		OPEN: 1,
 		readyState: 1,
 		sent: [],
 		send(payload) {
@@ -75,6 +76,28 @@ describe("turn runtime", () => {
 		expect(runtime.finishQueuedSpeech(turn)).toBe(0);
 	});
 
+	it("can complete synthetic turns without committing them to history", () => {
+		const { history, runtime } = createRuntime();
+		const ws = createOpenWs();
+		const { turn } = runtime.begin({
+			commitHistory: false,
+			createLogEvent: () => ({ event: "voice_turn" }),
+			startedAt: 100,
+			transcript: "[server opening]",
+			ws,
+		});
+
+		runtime.append(turn, "Привет.");
+		runtime.markDone(turn);
+
+		expect(runtime.completeIfReady(turn)).toBe(true);
+		expect(history).toEqual([]);
+		expect(ws.sent).toEqual([
+			{ reply: "Привет.", type: "turn_done" },
+			{ phase: "hearing", type: "state" },
+		]);
+	});
+
 	it("rejects stale turns after cancellation or replacement", () => {
 		const { runtime, turnLogs, ttsCancels } = createRuntime();
 		const oldTurn = runtime.begin({
@@ -85,7 +108,9 @@ describe("turn runtime", () => {
 		}).turn;
 
 		expect(runtime.accepts(oldTurn)).toBe(true);
+		expect(runtime.hasActive()).toBe(true);
 		runtime.cancel("replacement");
+		expect(runtime.hasActive()).toBe(false);
 		expect(runtime.accepts(oldTurn)).toBe(false);
 		expect(ttsCancels).toEqual(["replacement"]);
 		expect(turnLogs).toEqual([

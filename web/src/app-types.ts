@@ -40,6 +40,7 @@ export interface SettingsState {
 	topP: string;
 	repeatPenalty: string;
 	webToolsEnabled: boolean;
+	autoGreetingEnabled: boolean;
 	advancedOpen: boolean;
 }
 
@@ -52,6 +53,7 @@ export type SettingsAction =
 	| { type: "setTopP"; value: string }
 	| { type: "setRepeatPenalty"; value: string }
 	| { type: "setWebToolsEnabled"; value: boolean }
+	| { type: "setAutoGreetingEnabled"; value: boolean }
 	| { type: "setAdvancedOpen"; value: boolean };
 
 export interface LanguageOption {

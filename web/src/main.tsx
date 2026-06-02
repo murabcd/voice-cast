@@ -50,6 +50,8 @@ function settingsReducer(
 			return { ...state, repeatPenalty: action.value };
 		case "setWebToolsEnabled":
 			return { ...state, webToolsEnabled: action.value };
+		case "setAutoGreetingEnabled":
+			return { ...state, autoGreetingEnabled: action.value };
 		case "setAdvancedOpen":
 			return { ...state, advancedOpen: action.value };
 	}
@@ -108,6 +110,7 @@ function App() {
 		topP: "0.9",
 		repeatPenalty: "1.05",
 		webToolsEnabled: true,
+		autoGreetingEnabled: true,
 		advancedOpen: false,
 	});
 	const selected =
