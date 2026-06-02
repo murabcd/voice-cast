@@ -1,5 +1,6 @@
 import { ArrowRight, Globe2, MicOff, Play } from "lucide-react";
 import type React from "react";
+import { useRef } from "react";
 import { Button } from "@/components/ui/button";
 import type { Character, Phase, ToolActivityProvider } from "./app-types";
 import { Icons } from "./icons";
@@ -40,6 +41,12 @@ export function WelcomeScreen({
 		: phase === "warming"
 			? "Preparing"
 			: phase[0].toUpperCase() + phase.slice(1);
+	const activeStepRef = useRef(1);
+	if (!active) activeStepRef.current = 1;
+	else if (phase === "thinking" || phase === "speaking" || activeToolProvider)
+		activeStepRef.current = 3;
+	else activeStepRef.current = Math.max(activeStepRef.current, 2);
+	const activeStep = activeStepRef.current;
 	return (
 		<section className="welcome-screen">
 			<div className="welcome-inner">
@@ -95,15 +102,15 @@ export function WelcomeScreen({
 				</Button>
 
 				<ul className="steps" aria-label="Conversation steps">
-					<li className="step active">
+					<li className={`step ${activeStep === 1 ? "active" : ""}`}>
 						<b>1</b>Pick a character
 					</li>
 					<ArrowRight aria-hidden="true" />
-					<li className="step">
+					<li className={`step ${activeStep === 2 ? "active" : ""}`}>
 						<b>2</b>Start conversation
 					</li>
 					<ArrowRight aria-hidden="true" />
-					<li className="step">
+					<li className={`step ${activeStep === 3 ? "active" : ""}`}>
 						<b>3</b>Hear the reply
 					</li>
 				</ul>
@@ -137,7 +144,7 @@ export function WelcomeScreen({
 						className="animation-preview"
 						onClick={onTogglePreview}
 					>
-						Animation preview
+						Preview
 					</Button>
 				)}
 			</div>
