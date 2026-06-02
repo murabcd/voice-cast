@@ -121,6 +121,18 @@ describe("tool selector", () => {
 			toolName: "yandex_tracker_get_issue",
 			arguments: { issueKey: "PROJ-8508" },
 		});
+
+		expect(
+			selectToolsForTurn({
+				text: "Можешь посмотреть в Яндекс Трекере информацию по задаче сорок пять ноль семь.",
+				registry: registry(),
+			}),
+		).toMatchObject({
+			kind: "direct_tool_result",
+			category: "mcp_yandex_tracker_issue",
+			toolName: "yandex_tracker_get_issue",
+			arguments: { issueKey: "PROJ-4507" },
+		});
 	});
 
 	it("uses the default queue when STT emits an unknown queue-like token", () => {
@@ -153,6 +165,18 @@ describe("tool selector", () => {
 		expect(
 			selectToolsForTurn({
 				text: "Проверь задачу SUPPORT 91 в Яндекс Трекере",
+				registry: registry(),
+			}),
+		).toMatchObject({
+			kind: "direct_tool_result",
+			category: "mcp_yandex_tracker_issue",
+			toolName: "yandex_tracker_get_issue",
+			arguments: { issueKey: "SUPPORT-91" },
+		});
+
+		expect(
+			selectToolsForTurn({
+				text: "Проверь SUPPORT номер девять один в Яндекс Трекере",
 				registry: registry(),
 			}),
 		).toMatchObject({

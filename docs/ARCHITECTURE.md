@@ -61,6 +61,7 @@ browser mic PCM
 - Every non-ignored turn records the selected route kind, category, selected tools, web-follow-up flag, and query length in its final `voice_turn` log event.
 - Web tools run only when enabled by settings and selected by the routing policy.
 - MCP tools run only when configured in the server environment and selected by explicit private-system routing policy.
+- Tracker issue routing resolves explicit keys, configured queues, digit issue numbers, and Russian spoken issue numbers to direct issue lookups before any generic Tracker search.
 - Web follow-ups after a web-grounded turn must carry explicit mutable-fact or source/reference signals; ambiguous related-topic, pronunciation, or meta-speech follow-ups stay off the web path.
 - Tool answers must be grounded in returned tool results.
 - Tool-planning prompts and internal no-tool sentinels are never reused as final-answer context or spoken to the user.

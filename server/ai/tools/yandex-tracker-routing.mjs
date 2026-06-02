@@ -1,3 +1,5 @@
+import { parseRussianSpokenNumberPrefix } from "./russian-spoken-number.mjs";
+
 const trackerSignalPattern =
 	/(tracker|yandex|яндекс|трекер|задач[аиу]?|тикет|issue|queue|очеред[ьи])/i;
 const issueKeyPattern = /\b[A-Z][A-Z0-9]+-\d+\b/i;
@@ -7,6 +9,27 @@ const bareIssueNumberPattern =
 	/(?:номер(?:ом)?|задач[аиу]?|тикет|issue|ticket)\D{0,24}((?:\d[\s.:-]*){1,16})\b/i;
 const searchPattern =
 	/(find|search|list|найди|найти|поищи|поиск|покажи|список|все|всё|очеред[ьи]|статус|приоритет|пользовател|исполнител|assignee|автор|сколько|количеств)/i;
+const issueAnchorTerms = [
+	"номером",
+	"номер",
+	"задача",
+	"задаче",
+	"задачи",
+	"задачу",
+	"тикет",
+	"issue",
+	"ticket",
+];
+const issueNumberLookahead = 8;
+const issueNumberSkipWords = new Set([
+	"с",
+	"со",
+	"по",
+	"под",
+	"про",
+	"информацию",
+	"контекст",
+]);
 
 function hasTool(availableToolNames, name) {
 	return availableToolNames.has(name);
@@ -30,6 +53,91 @@ function normalizeQueue(value) {
 function normalizeIssueNumber(value) {
 	const number = String(value ?? "").replaceAll(/\D+/g, "");
 	return /^\d{1,8}$/.test(number) ? number : "";
+}
+
+function normalizeIssueNumberText(value) {
+	const numeric = normalizeIssueNumber(value);
+	if (numeric) return numeric;
+	const spoken = parseRussianSpokenNumberPrefix(
+		String(value ?? "")
+			.toLowerCase()
+			.split(" "),
+	);
+	return normalizeIssueNumber(spoken);
+}
+
+function isLatinLetter(char) {
+	const lower = char.toLowerCase();
+	return lower >= "a" && lower <= "z";
+}
+
+function isRussianLetter(char) {
+	const lower = char.toLowerCase();
+	return lower === "ё" || (lower >= "а" && lower <= "я");
+}
+
+function isDigit(char) {
+	return char >= "0" && char <= "9";
+}
+
+function trackerTokens(text) {
+	const tokens = [];
+	let current = "";
+	for (const char of String(text ?? "")) {
+		if (isLatinLetter(char) || isRussianLetter(char) || isDigit(char)) {
+			current += char;
+			continue;
+		}
+		if (current) {
+			tokens.push(current);
+			current = "";
+		}
+	}
+	if (current) tokens.push(current);
+	return tokens;
+}
+
+function tokenNumber(tokens, index) {
+	const token = tokens[index] ?? "";
+	const numeric = normalizeIssueNumber(token);
+	if (numeric) return numeric;
+	return normalizeIssueNumber(
+		parseRussianSpokenNumberPrefix(tokens.slice(index)),
+	);
+}
+
+function numberAfterToken(tokens, index) {
+	const limit = Math.min(tokens.length, index + 1 + issueNumberLookahead);
+	for (let cursor = index + 1; cursor < limit; cursor += 1) {
+		const token = String(tokens[cursor] ?? "").toLowerCase();
+		if (issueNumberSkipWords.has(token)) continue;
+		const number = tokenNumber(tokens, cursor);
+		if (number) return number;
+	}
+	return "";
+}
+
+function issueNumberFromTokens(prompt, options = {}) {
+	const tokens = trackerTokens(prompt);
+	const knownQueues = normalizeKnownQueues(options);
+
+	for (let index = 0; index < tokens.length; index += 1) {
+		const token = String(tokens[index] ?? "");
+		const queue = normalizeQueue(token);
+		if (!queue || !knownQueues.has(queue)) continue;
+		const nextNumber = numberAfterToken(tokens, index);
+		if (nextNumber) return { queue, number: nextNumber };
+	}
+
+	const queue = normalizeQueue(options.defaultQueue);
+	if (!queue) return undefined;
+	for (let index = 0; index < tokens.length; index += 1) {
+		const token = String(tokens[index] ?? "").toLowerCase();
+		if (!issueAnchorTerms.includes(token)) continue;
+		const number = numberAfterToken(tokens, index);
+		if (number) return { queue, number };
+	}
+	return undefined;
 }
 
 function normalizeKnownQueues({ defaultQueue, limitQueues } = {}) {
@@ -62,12 +170,13 @@ function extractYandexTrackerIssueKey(text, options = {}) {
 		if (queue && number) return `${queue}-${number}`;
 	}
 
-	const queue = normalizeQueue(options.defaultQueue);
-	if (!queue) return undefined;
 	const bare = bareIssueNumberPattern.exec(prompt);
-	if (!bare) return undefined;
-	const number = normalizeIssueNumber(bare[1]);
-	return number ? `${queue}-${number}` : undefined;
+	const bareNumber = normalizeIssueNumberText(bare?.[1]);
+	const defaultQueue = normalizeQueue(options.defaultQueue);
+	if (bareNumber && defaultQueue) return `${defaultQueue}-${bareNumber}`;
+
+	const tokenMatch = issueNumberFromTokens(prompt, options);
+	return tokenMatch ? `${tokenMatch.queue}-${tokenMatch.number}` : undefined;
 }
 
 export function selectYandexTrackerTools(text, tools, options = {}) {

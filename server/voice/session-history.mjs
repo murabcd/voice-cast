@@ -11,7 +11,7 @@ const maxSummaryTextLength = 120;
 
 const repeatRequestPatterns = [
 	/(?:^|\s)повтори(?:\s|$)/i,
-	/(?:^|\s)(?:ещ[её]|еще)\s+раз(?:\s|$)/i,
+	/(?:^|\s)(?:скажи|произнеси|повтори)\s+(?:ещ[её]|еще)\s+раз(?:\s|$)/i,
 	/(?:^|\s)что\s+ты\s+(?:сказал|говорил)(?:\s|$)/i,
 	/\brepeat\b/i,
 	/\bsay\s+that\s+again\b/i,

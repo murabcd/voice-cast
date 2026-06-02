@@ -83,6 +83,11 @@ describe("session history", () => {
 	it("detects repeat requests", () => {
 		expect(isRepeatLastAnswerRequest("Повтори еще, что ты сказал")).toBe(true);
 		expect(isRepeatLastAnswerRequest("скажи ещё раз")).toBe(true);
+		expect(
+			isRepeatLastAnswerRequest(
+				"Попробуй еще раз посмотри задачу в Яндекс Трекере сорок пять ноль семь.",
+			),
+		).toBe(false);
 		expect(isRepeatLastAnswerRequest("Что такое Flomni?")).toBe(false);
 	});
 
