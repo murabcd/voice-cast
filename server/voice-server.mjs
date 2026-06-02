@@ -10,6 +10,7 @@ import {
 	isCapabilityQuestion,
 	runtimeCapabilityContext,
 } from "./voice/capabilities.mjs";
+import { runtimeCharacterContext } from "./voice/character-context.mjs";
 import { parseClientSettingsMessage } from "./voice/client-settings.mjs";
 import { config } from "./voice/config.mjs";
 import { startImmediateTurn } from "./voice/immediate-turn.mjs";
@@ -21,6 +22,7 @@ import {
 	shouldWaitForUser,
 } from "./voice/realtime-voice-patterns.mjs";
 import { planReply } from "./voice/reply-planner.mjs";
+import { runtimeSessionContext } from "./voice/session-context.mjs";
 import {
 	createSessionHistory,
 	isRepeatLastAnswerRequest,
@@ -258,7 +260,16 @@ async function handleFinal(ws, transcript) {
 		webTools,
 		mcpTools,
 	});
-	const runtimeContext = runtimeCapabilityContext(capabilities);
+	const runtimeContext = [
+		runtimeSessionContext({ language: settings.language }),
+		runtimeCapabilityContext(capabilities),
+		runtimeCharacterContext({
+			characterId: settings.characterId,
+			language: settings.language,
+		}),
+	]
+		.filter(Boolean)
+		.join("\n\n");
 	const { controller, turn, turnId } = turnRuntime.begin({
 		startedAt,
 		transcript: normalizedTranscript,
@@ -444,7 +455,7 @@ wss.on("connection", (ws) => {
 				clientSettings.set(ws, parsed.settings);
 				log(
 					"settings",
-					`language=${parsed.logFields.language} voice=${parsed.logFields.voiceName} auto_greeting=${parsed.logFields.autoGreetingEnabled} prompt=${JSON.stringify(parsed.logFields.systemPromptPreview)}`,
+					`language=${parsed.logFields.language} voice=${parsed.logFields.voiceName} character=${parsed.logFields.characterId} auto_greeting=${parsed.logFields.autoGreetingEnabled} prompt=${JSON.stringify(parsed.logFields.systemPromptPreview)}`,
 				);
 				startOpeningTurn(ws);
 				return;

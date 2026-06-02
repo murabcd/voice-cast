@@ -28,7 +28,7 @@ function buildRequestBody({
 }) {
 	const chatTemplateKwargs = { enable_thinking: false };
 	if (tools?.length)
-		chatTemplateKwargs.tools = tools.map((tool) =>
+		chatTemplateKwargs.xml_tools = tools.map((tool) =>
 			normalizeToolForTemplate(tool),
 		);
 	const body = {

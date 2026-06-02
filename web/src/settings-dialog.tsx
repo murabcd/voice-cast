@@ -42,7 +42,7 @@ import { castAgent } from "./voice-agent-config";
 interface SettingsDialogProps {
 	onChange: React.Dispatch<SettingsAction>;
 	selected: Character;
-	selectedVoicePrompt: string;
+	selectedStylePrompt: string;
 	settings: SettingsState;
 }
 
@@ -69,7 +69,7 @@ function useMediaQuery(query: string) {
 export function SettingsDialog({
 	onChange,
 	selected,
-	selectedVoicePrompt,
+	selectedStylePrompt,
 	settings,
 }: SettingsDialogProps) {
 	const isMobile = useMediaQuery(mobileSettingsQuery);
@@ -86,7 +86,7 @@ export function SettingsDialog({
 					<SettingsContent
 						onChange={onChange}
 						selected={selected}
-						selectedVoicePrompt={selectedVoicePrompt}
+						selectedStylePrompt={selectedStylePrompt}
 						settings={settings}
 					/>
 				</DrawerContent>
@@ -103,7 +103,7 @@ export function SettingsDialog({
 				<SettingsContent
 					onChange={onChange}
 					selected={selected}
-					selectedVoicePrompt={selectedVoicePrompt}
+					selectedStylePrompt={selectedStylePrompt}
 					settings={settings}
 				/>
 			</DialogContent>
@@ -114,7 +114,7 @@ export function SettingsDialog({
 function SettingsContent({
 	onChange,
 	selected,
-	selectedVoicePrompt,
+	selectedStylePrompt,
 	settings,
 }: SettingsDialogProps) {
 	return (
@@ -162,7 +162,7 @@ function SettingsContent({
 			<Field>
 				<FieldLabel>Selected character: {selected.name}</FieldLabel>
 				<FieldDescription className="character-prompt-preview">
-					{selectedVoicePrompt}
+					{selectedStylePrompt}
 				</FieldDescription>
 			</Field>
 			<Collapsible

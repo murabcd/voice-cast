@@ -14,5 +14,9 @@ describe("voice prompts", () => {
 			content:
 				"Base prompt.\n\n## Runtime Capabilities\nAvailable now:\n- local tools",
 		});
+		expect(messages.at(-1)).toEqual({
+			role: "user",
+			content: "Что ты умеешь?",
+		});
 	});
 });

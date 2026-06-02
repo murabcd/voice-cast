@@ -14,7 +14,6 @@ import {
 	shouldAutoOpenToolResult,
 } from "./tool-result-wire";
 import { useAvatarAnimation } from "./use-avatar-animation";
-import { castAgent } from "./voice-agent-config";
 import {
 	downsampleTo16k,
 	floatToPcm16,
@@ -34,7 +33,6 @@ const bargeInReleaseMs = 800;
 interface UseVoiceSessionOptions {
 	previewAnimation: boolean;
 	selected: Character;
-	selectedCharacterPrompt: string;
 	selectedLanguage: LanguageOption;
 	settings: SettingsState;
 }
@@ -49,7 +47,6 @@ function getPlaybackSources(
 export function useVoiceSession({
 	previewAnimation,
 	selected,
-	selectedCharacterPrompt,
 	selectedLanguage,
 	settings,
 }: UseVoiceSessionOptions) {
@@ -312,11 +309,8 @@ export function useVoiceSession({
 			ws.send(
 				JSON.stringify({
 					type: "settings",
-					systemPrompt: castAgent.buildRuntimeInstructions({
-						baseInstructions: settings.systemPrompt,
-						languageName: selectedLanguage.name,
-						characterInstructions: selectedCharacterPrompt,
-					}),
+					baseSystemPrompt: settings.systemPrompt,
+					characterId: selected.id,
 					language: selectedLanguage.code,
 					voiceName: selected.voiceName,
 					maxTokens: settings.maxTokens,
@@ -359,9 +353,8 @@ export function useVoiceSession({
 		bargeInDetector,
 		handleMicAudio,
 		handleServerMessage,
-		selectedCharacterPrompt,
+		selected.id,
 		selectedLanguage.code,
-		selectedLanguage.name,
 		selected.voiceName,
 		settings.autoGreetingEnabled,
 		settings.maxTokens,

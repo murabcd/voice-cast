@@ -1,14 +1,7 @@
-export interface VoiceAgentRuntimePromptInput {
-	baseInstructions: string;
-	languageName: string;
-	characterInstructions: string;
-}
-
 export interface VoiceAgentConfig {
 	name: string;
 	publicDescription: string;
 	defaultInstructions(languageCode: string): string;
-	buildRuntimeInstructions(input: VoiceAgentRuntimePromptInput): string;
 }
 
 const russianDefaultInstructions = [
@@ -35,31 +28,9 @@ function defaultInstructions(languageCode: string) {
 		: russianDefaultInstructions;
 }
 
-function buildRuntimeInstructions({
-	baseInstructions,
-	languageName,
-	characterInstructions,
-}: VoiceAgentRuntimePromptInput) {
-	return [
-		baseInstructions,
-		`Selected interface language: ${languageName}. Reply in ${languageName}.`,
-		`Keep tool bridges and final answers in ${languageName}.`,
-		"Do not switch language because of accent, filler words, names, addresses, or isolated foreign words.",
-		characterInstructions,
-		"Use the character only for tone, pacing, and manner of speech.",
-		"Do not introduce character-specific topics, jobs, lore, or examples unless the user asks about them.",
-		"Direct answers: 1-2 short sentences.",
-		"Clarifying questions: ask one question at a time.",
-		"Tool results: summarize the result first, then give only the next useful detail.",
-		"Do not mention tool names, JSON, XML, Markdown, or URLs.",
-		"If reading a code, number, identifier, or mixed letter-digit value, read the characters separately and do not omit any character.",
-	].join("\n");
-}
-
 export const castAgent: VoiceAgentConfig = {
 	name: "voice-cast",
 	publicDescription:
 		"Local speech-to-speech assistant for talking with cartoon characters, with optional read-only web tools.",
 	defaultInstructions,
-	buildRuntimeInstructions,
 };

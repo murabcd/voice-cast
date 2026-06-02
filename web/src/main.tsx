@@ -124,7 +124,6 @@ function App() {
 	const voiceSession = useVoiceSession({
 		previewAnimation: view.previewAnimation,
 		selected,
-		selectedCharacterPrompt,
 		selectedLanguage,
 		settings,
 	});
@@ -183,7 +182,7 @@ function App() {
 			behavior: "smooth",
 		});
 	};
-	const selectedVoicePrompt = `Character voice: ${selectedCharacterPrompt}`;
+	const selectedStylePrompt = `Speaking style: ${selectedCharacterPrompt}`;
 
 	const sourcePanelOpen = voiceSession.toolResultOpen;
 
@@ -244,7 +243,7 @@ function App() {
 			<SettingsDialog
 				onChange={dispatchSettings}
 				selected={selected}
-				selectedVoicePrompt={selectedVoicePrompt}
+				selectedStylePrompt={selectedStylePrompt}
 				settings={settings}
 			/>
 			<SourceSheet

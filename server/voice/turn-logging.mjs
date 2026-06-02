@@ -16,6 +16,7 @@ export function createTurnLog({
 		transcript_chars: transcript.length,
 		language: settings.language,
 		voice_name: settings.voiceName,
+		character_id: settings.characterId,
 		web_tools_enabled: settings.webToolsEnabled ?? true,
 		history_turns: 0,
 		max_tokens: settings.maxTokens ?? config.llama.maxTokens,

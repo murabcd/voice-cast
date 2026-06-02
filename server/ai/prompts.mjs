@@ -34,7 +34,7 @@ export function buildVoiceMessages({
 		...history,
 		{
 			role: "user",
-			content: `${prompt}\n\n/no_think`,
+			content: prompt,
 		},
 	];
 }

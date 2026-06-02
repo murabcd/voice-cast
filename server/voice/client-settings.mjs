@@ -1,3 +1,4 @@
+import { resolveCharacterPreset } from "./character-context.mjs";
 import {
 	supertonicLanguages,
 	supertonicVoiceNames,
@@ -13,13 +14,16 @@ function parseNumber(value, { min, max }) {
 
 export function parseClientSettingsMessage(msg) {
 	const maxTokens = Number(msg.maxTokens);
+	const characterId = Number(msg.characterId);
 	const language = String(msg.language ?? "").trim();
 	const voiceName = String(msg.voiceName ?? "").trim();
 	const autoGreetingEnabled = msg.autoGreetingEnabled !== false;
+	const character = resolveCharacterPreset(characterId);
 	return {
 		settings: {
 			autoGreetingEnabled,
-			systemPrompt: String(msg.systemPrompt ?? "").trim(),
+			systemPrompt: String(msg.baseSystemPrompt ?? "").trim(),
+			characterId: character?.id,
 			language: supertonicLanguages.has(language) ? language : undefined,
 			voiceName: supertonicVoiceNames.has(voiceName) ? voiceName : undefined,
 			maxTokens:
@@ -32,8 +36,9 @@ export function parseClientSettingsMessage(msg) {
 		logFields: {
 			language,
 			autoGreetingEnabled,
+			characterId,
 			voiceName,
-			systemPromptPreview: String(msg.systemPrompt ?? "").slice(0, 120),
+			systemPromptPreview: String(msg.baseSystemPrompt ?? "").slice(0, 120),
 		},
 	};
 }
