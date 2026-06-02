@@ -218,6 +218,13 @@ textarea:not(:disabled) {
 	transform: translateX(0);
 }
 
+.source-drawer {
+	max-height: min(82svh, 680px);
+	gap: 0;
+	overflow: hidden;
+	border-radius: 18px 18px 0 0;
+}
+
 .source-panel-header {
 	display: flex;
 	min-height: 70px;
@@ -820,17 +827,26 @@ h1 {
 	margin-top: 42px;
 }
 
-.settings-dialog {
+.settings-surface {
 	display: flex;
 	flex-direction: column;
 	gap: 0;
-	width: min(560px, 100%);
-	max-height: min(760px, 90vh);
 	overflow: hidden;
-	border-radius: 16px;
 	background: #fff;
 	padding: 22px;
 	box-shadow: 0 24px 60px rgba(0, 0, 0, 0.22);
+}
+
+.settings-dialog {
+	width: min(560px, 100%);
+	max-height: min(760px, 90vh);
+	border-radius: 16px;
+}
+
+.settings-drawer {
+	max-height: min(84svh, 760px);
+	padding-top: 12px;
+	border-radius: 18px 18px 0 0;
 }
 
 .dialog-header {
@@ -858,11 +874,11 @@ h1 {
 	display: none;
 }
 
-.settings-dialog [data-slot="field"] {
+.settings-surface [data-slot="field"] {
 	gap: 8px;
 }
 
-.settings-dialog [data-slot="field-label"] {
+.settings-surface [data-slot="field-label"] {
 	color: #5d5d5d;
 	font-size: 13px;
 	font-weight: 700;
@@ -880,7 +896,7 @@ h1 {
 	height: 42px;
 }
 
-.settings-dialog input[type="number"] {
+.settings-surface input[type="number"] {
 	height: 42px;
 	font-size: 14px;
 	font-variant-numeric: tabular-nums;
@@ -1043,6 +1059,25 @@ h1 {
 
 	.next-button {
 		margin-inline: auto;
+	}
+
+	.settings-drawer {
+		width: 100%;
+		padding: 16px 18px 20px;
+	}
+
+	.settings-drawer .dialog-header {
+		margin-bottom: 14px;
+		padding: 8px 0 0;
+		text-align: left;
+	}
+
+	.settings-drawer .dialog-header h2 {
+		font-size: 20px;
+	}
+
+	.settings-drawer .settings-fields {
+		padding-bottom: env(safe-area-inset-bottom);
 	}
 }
 

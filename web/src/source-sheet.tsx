@@ -2,11 +2,11 @@ import { ExternalLink, XIcon } from "lucide-react";
 import React from "react";
 import { Button } from "@/components/ui/button";
 import {
-	Sheet,
-	SheetContent,
-	SheetDescription,
-	SheetTitle,
-} from "@/components/ui/sheet";
+	Drawer,
+	DrawerContent,
+	DrawerDescription,
+	DrawerTitle,
+} from "@/components/ui/drawer";
 import type { ToolResultSummary } from "./app-types";
 import { Icons } from "./icons";
 
@@ -37,20 +37,17 @@ export function SourceSheet({ open, result, onOpenChange }: SourceSheetProps) {
 	}
 
 	return (
-		<Sheet open={open} onOpenChange={onOpenChange}>
-			<SheetContent
-				side="right"
-				className="w-[min(420px,100vw)] gap-0 overflow-hidden p-0 sm:max-w-[420px]"
-			>
-				<SheetTitle className="sr-only">
+		<Drawer open={open} onOpenChange={onOpenChange}>
+			<DrawerContent className="source-drawer">
+				<DrawerTitle className="sr-only">
 					{result?.title ?? "Sources"}
-				</SheetTitle>
-				<SheetDescription className="sr-only">
+				</DrawerTitle>
+				<DrawerDescription className="sr-only">
 					{result?.query ? `Query: ${result.query}` : "Latest tool result"}
-				</SheetDescription>
+				</DrawerDescription>
 				<SourcePanel result={result} />
-			</SheetContent>
-		</Sheet>
+			</DrawerContent>
+		</Drawer>
 	);
 }
 
