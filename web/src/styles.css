@@ -335,12 +335,6 @@ textarea:not(:disabled) {
 	word-break: break-word;
 }
 
-.source-result-text.is-scrollable {
-	max-height: min(36svh, 360px);
-	overflow-y: auto;
-	padding-right: 8px;
-}
-
 .source-links {
 	display: flex;
 	min-width: 0;

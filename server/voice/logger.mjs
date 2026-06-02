@@ -2,10 +2,11 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import pino from "pino";
 
-const logDir = join(process.cwd(), "logs");
-mkdirSync(logDir, { recursive: true });
 const sessionId = new Date().toISOString().replaceAll(/[:.]/g, "-");
-const sessionLogPath = join(logDir, `voice-${sessionId}.log`);
+const configuredLogDir = process.env.VOICE_LOG_DIR?.trim();
+const sessionLogPath = configuredLogDir
+	? join(configuredLogDir, `voice-${sessionId}.log`)
+	: undefined;
 const base = {
 	pid: process.pid,
 	session_id: sessionId,
@@ -21,31 +22,33 @@ const pinoOptions = {
 };
 
 const stdoutStream = pino.destination({ dest: 1, sync: false });
-const fileStream = pino.destination({
-	dest: sessionLogPath,
-	mkdir: true,
-	sync: false,
-});
-const logger = pino(
-	pinoOptions,
-	pino.multistream([
-		{ level: "trace", stream: stdoutStream },
-		{ level: "trace", stream: fileStream },
-	]),
-);
+const streams = [{ level: "trace", stream: stdoutStream }];
+let fileStream;
+if (sessionLogPath) {
+	mkdirSync(configuredLogDir, { recursive: true });
+	fileStream = pino.destination({
+		dest: sessionLogPath,
+		mkdir: true,
+		sync: false,
+	});
+	streams.push({ level: "trace", stream: fileStream });
+}
+const logger = pino(pinoOptions, pino.multistream(streams));
 
 stdoutStream.on("error", (error) => {
-	fileStream.write(
-		`${JSON.stringify({
-			level: "warn",
-			ts: new Date().toISOString(),
-			...base,
-			event: "stdout_error",
-			error_code: error?.code,
-			error_message: error?.message,
-			message: "stdout logging failed",
-		})}\n`,
-	);
+	if (fileStream) {
+		fileStream.write(
+			`${JSON.stringify({
+				level: "warn",
+				ts: new Date().toISOString(),
+				...base,
+				event: "stdout_error",
+				error_code: error?.code,
+				error_message: error?.message,
+				message: "stdout logging failed",
+			})}\n`,
+		);
+	}
 });
 
 function normalizeError(error) {

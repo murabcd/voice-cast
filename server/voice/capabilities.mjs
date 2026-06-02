@@ -1,20 +1,87 @@
-const capabilityQuestionPatterns = [
-	/\bwhat can you do\b/i,
-	/\bwhat are your capabilities\b/i,
-	/\bwhat tools do you have\b/i,
-	/\bwhat can this app do\b/i,
-	/\bcan you (send|write).*\b(email|message|sms|notification)\b/i,
-	/\bcan you (book|buy|purchase|change|modify).*\b/i,
-	/\bcan you (read|open|access).*\b(my )?(files|private accounts|account)\b/i,
-	/что ты умеешь/i,
-	/что умеешь/i,
-	/какие у тебя (есть )?(возможности|функции)/i,
-	/что ты можешь/i,
-	/какие инструменты/i,
-	/можешь.*(отправить|написать).*(письмо|сообщение|смс|уведомление)/i,
-	/можешь.*(забронировать|купить|изменить|поменять)/i,
-	/можешь.*(прочитать|открыть|получить доступ).*(файл|аккаунт|счет)/i,
+import {
+	hasAnyPhrase,
+	hasAnyPrefix,
+	hasAnyToken,
+	hasOrderedTerms,
+	normalizeIntentText,
+	tokenizeIntentText,
+} from "./intent-text.mjs";
+
+const capabilityPhrases = [
+	"what are your capabilities",
+	"what can this app do",
+	"what can you do",
+	"what tools do you have",
+	"какие инструменты",
+	"какие у тебя возможности",
+	"какие у тебя есть возможности",
+	"какие у тебя функции",
+	"какие у тебя есть функции",
+	"что ты можешь",
+	"что ты умеешь",
+	"что умеешь",
 ];
+
+const unavailableActionWords = new Set([
+	"book",
+	"booking",
+	"buy",
+	"change",
+	"modify",
+	"notification",
+	"notifications",
+	"purchase",
+	"send",
+	"sms",
+	"write",
+]);
+
+const unavailableActionPrefixes = [
+	"заброниров",
+	"измен",
+	"куп",
+	"напис",
+	"отправ",
+	"помен",
+];
+
+const privateReadWords = new Set([
+	"access",
+	"account",
+	"accounts",
+	"file",
+	"files",
+	"open",
+	"private",
+	"read",
+]);
+
+const privateReadPrefixes = [
+	"аккаунт",
+	"доступ",
+	"откры",
+	"прочит",
+	"счет",
+	"файл",
+];
+
+function asksCanYouDoUnavailableAction(tokens) {
+	return (
+		hasOrderedTerms(tokens, ["can", "you"], 2) &&
+		(hasAnyToken(tokens, unavailableActionWords) ||
+			hasAnyPrefix(tokens, unavailableActionPrefixes) ||
+			hasAnyToken(tokens, privateReadWords) ||
+			hasAnyPrefix(tokens, privateReadPrefixes))
+	);
+}
+
+function asksMozheshUnavailableAction(tokens) {
+	return (
+		hasAnyPrefix(tokens, ["можешь"]) &&
+		(hasAnyPrefix(tokens, unavailableActionPrefixes) ||
+			hasAnyPrefix(tokens, privateReadPrefixes))
+	);
+}
 
 function hasTool(registry, namespaceName, toolName) {
 	const namespace = registry.namespaces.find(
@@ -52,7 +119,13 @@ function localDateTimeAvailable(registry) {
 export function isCapabilityQuestion(text) {
 	const prompt = String(text ?? "").trim();
 	if (!prompt) return false;
-	return capabilityQuestionPatterns.some((pattern) => pattern.test(prompt));
+	const normalized = normalizeIntentText(prompt);
+	const tokens = tokenizeIntentText(prompt);
+	return (
+		hasAnyPhrase(normalized, capabilityPhrases) ||
+		asksCanYouDoUnavailableAction(tokens) ||
+		asksMozheshUnavailableAction(tokens)
+	);
 }
 
 export function buildRuntimeCapabilities({

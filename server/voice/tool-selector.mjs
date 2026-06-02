@@ -1,19 +1,10 @@
 import { webRoutingPolicy } from "./policy/tool-routing-policy.mjs";
 import { classifyUserTurn } from "./turn-classifier.mjs";
 
-function matchesAny(patterns, text) {
-	return patterns.some((pattern) => pattern.test(text));
-}
-
 function routeNamedEntityQuestion(prompt) {
-	if (
-		webRoutingPolicy.localConversationPatterns.some((pattern) =>
-			pattern.test(prompt),
-		)
-	)
-		return undefined;
-	if (!webRoutingPolicy.namedEntityPattern.test(prompt)) return undefined;
-	if (!webRoutingPolicy.questionPattern.test(prompt)) return undefined;
+	if (webRoutingPolicy.isLocalConversationRequest(prompt)) return undefined;
+	if (!webRoutingPolicy.hasNamedEntity(prompt)) return undefined;
+	if (!webRoutingPolicy.isQuestion(prompt)) return undefined;
 	return {
 		mode: "assisted",
 		category: "named_entity_question",
@@ -23,9 +14,8 @@ function routeNamedEntityQuestion(prompt) {
 
 function selectWebRoute(prompt) {
 	return (
-		webRoutingPolicy.routes.find((route) =>
-			matchesAny(route.patterns, prompt),
-		) ?? routeNamedEntityQuestion(prompt)
+		webRoutingPolicy.routes.find((route) => route.match(prompt)) ??
+		routeNamedEntityQuestion(prompt)
 	);
 }
 
@@ -37,10 +27,9 @@ function buildFollowUpSearchQuery(prompt, webContext) {
 
 function routeWebFollowUp(prompt, webContext) {
 	if (!webContext?.metadata?.usedWeb) return undefined;
-	if (matchesAny(webRoutingPolicy.localFollowUpPatterns, prompt))
-		return undefined;
+	if (webRoutingPolicy.isLocalFollowUp(prompt)) return undefined;
 	const route = webRoutingPolicy.followUpRoutes.find((candidate) =>
-		matchesAny(candidate.patterns, prompt),
+		candidate.match(prompt),
 	);
 	if (!route) return undefined;
 	return {

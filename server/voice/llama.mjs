@@ -1,4 +1,6 @@
 import { buildVoiceMessages } from "../ai/prompts.mjs";
+import { log } from "./logger.mjs";
+import { measureMessages } from "./message-metrics.mjs";
 import { stripLlmArtifacts } from "./text.mjs";
 
 const textDecoder = new TextDecoder();
@@ -53,6 +55,7 @@ async function fetchLlama({
 	repeatPenalty,
 	tools,
 	stream,
+	purpose,
 }) {
 	const body = buildRequestBody({
 		messages,
@@ -63,6 +66,22 @@ async function fetchLlama({
 		tools,
 	});
 	body.stream = stream;
+	const metrics = measureMessages(messages);
+	log(
+		"llm",
+		`request purpose=${purpose} stream=${stream} messages=${metrics.messages} chars=${metrics.totalChars} system=${metrics.systemChars} user=${metrics.userChars} assistant=${metrics.assistantChars} tool=${metrics.toolResultChars}`,
+		{
+			llm_purpose: purpose,
+			llm_stream: stream,
+			llm_messages: metrics.messages,
+			llm_chars: metrics.totalChars,
+			llm_system_chars: metrics.systemChars,
+			llm_user_chars: metrics.userChars,
+			llm_assistant_chars: metrics.assistantChars,
+			llm_tool_result_chars: metrics.toolResultChars,
+			llm_max_tokens: maxTokens,
+		},
+	);
 	const response = await fetch(url, {
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
@@ -92,6 +111,7 @@ export async function completeLlamaReply({
 	topP = 0.9,
 	repeatPenalty = 1.05,
 	tools,
+	purpose = "complete",
 }) {
 	const response = await fetchLlama({
 		url,
@@ -103,6 +123,7 @@ export async function completeLlamaReply({
 		repeatPenalty,
 		tools,
 		stream: false,
+		purpose,
 	});
 	const payload = await response.json();
 	return payload.choices?.[0]?.message?.content ?? "";
@@ -126,6 +147,7 @@ export async function* streamLlamaReply({
 	topP = 0.9,
 	repeatPenalty = 1.05,
 	tools,
+	purpose = "stream",
 }) {
 	const response = await fetchLlama({
 		url,
@@ -137,6 +159,7 @@ export async function* streamLlamaReply({
 		repeatPenalty,
 		tools,
 		stream: true,
+		purpose,
 	});
 	const reader = response.body.getReader();
 	let buffer = "";

@@ -127,19 +127,18 @@ function SourceSection({
 }: {
 	section: ToolResultSummary["sections"][number];
 }) {
-	const longText = section.text.length > 420;
 	return (
 		<section className="source-result-section">
 			<h3>{section.label}</h3>
-			<p
-				className={
-					longText ? "source-result-text is-scrollable" : "source-result-text"
-				}
-			>
-				{section.text}
-			</p>
+			<p className="source-result-text">{sourcePreviewText(section.text)}</p>
 		</section>
 	);
+}
+
+function sourcePreviewText(text: string) {
+	const maxLength = 900;
+	if (text.length <= maxLength) return text;
+	return `${text.slice(0, maxLength).trim()}...`;
 }
 
 function ProviderIcon({ result }: { result: ToolResultSummary }) {

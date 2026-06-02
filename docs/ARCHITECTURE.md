@@ -23,7 +23,7 @@ browser mic PCM
 | Server runtime | `server/voice-server.mjs` | Composition of HTTP/static serving, WebSocket sessions, STT/LLM/TTS/tool wiring, cancellation, and shutdown. |
 | Server support | `server/voice/static-server.mjs`, `server/voice/capabilities.mjs`, `server/voice/character-context.mjs`, `server/voice/client-settings.mjs`, `server/voice/immediate-turn.mjs`, `server/voice/opening-turn.mjs`, `server/voice/session-context.mjs`, `server/voice/session-history.mjs`, `server/voice/turn-runtime.mjs`, `server/voice/turn-logging.mjs`, `server/voice/tool-activity.mjs`, `server/voice/tool-source-card.mjs`, `server/voice/wire.mjs` | Static dist serving, runtime capability context, validated character context, settings parsing, immediate reply turn composition, startup greeting policy, dynamic voice-session context, compact conversation memory, turn lifecycle state, structured logging, tool activity state, tool result source-card shaping, and wire encoding. |
 | AI policy | `server/ai/prompts.mjs`, `web/src/voice-agent-config.ts` | Prompt shape and browser-editable base instructions. |
-| Voice policy | `server/voice/policy/*.mjs`, `server/voice/realtime-voice-patterns.mjs` | Turn classification patterns, local tool policy, web route policy, pronunciation policy, silence/no-op handling, and tool preambles. |
+| Voice policy | `server/voice/policy/*.mjs`, `server/voice/intent-text.mjs`, `server/voice/realtime-voice-patterns.mjs` | Token-based turn classification, local tool policy, web route policy, pronunciation policy, silence/no-op handling, and tool preambles. |
 | LLM | `server/voice/llama.mjs`, `server/voice/tool-loop.mjs`, `server/voice/reply-planner.mjs` | llama.cpp requests, tool-call loop, direct web grounding, and reply planning. |
 | Tool routing | `server/voice/tool-selector.mjs`, `server/ai/tools/tool-registry.mjs` | Per-turn structured tool selection across local deterministic tools, optional web tools, and configured MCP tools. |
 | Tools | `server/ai/tools/local-date-time-tools.mjs`, `server/ai/tools/ollama-web-tools.mjs`, `server/ai/tools/mcp-tools.mjs` | Deterministic local date/time replies, Ollama web search/fetch boundaries with payload caps, and MCP stdio client/tool normalization. |
@@ -40,7 +40,7 @@ browser mic PCM
 - Voice modules should stay single-purpose and expose small functions/classes.
 - `turn-runtime.mjs` owns active turn acceptance, cancellation, queued speech accounting, and history commit timing.
 - `session-history.mjs` owns compact memory, rolling summaries, and web-grounding metadata; prompt builders consume its messages, not its internal state.
-- `tool-selector.mjs` owns turn-level routing decisions; policy files provide static matching data, and tool registry owns executable tool namespaces.
+- `tool-selector.mjs` owns turn-level routing decisions; policy files provide explicit token/phrase classifiers, and tool registry owns executable tool namespaces.
 - `capabilities.mjs` owns user-facing capability claims. It derives availability from the runtime tool registry and handles capability questions deterministically instead of letting the model infer app powers.
 - `session-context.mjs` and `character-context.mjs` own model-facing dynamic voice behavior. Character style is validated by id and injected by the server, not composed by the browser.
 - Tool code owns external API shapes and should return compact structured objects.
@@ -48,6 +48,7 @@ browser mic PCM
 - `tool-source-card.mjs` owns user-facing source panel event shaping. Tools may return structured `sections`; UI renders those sections directly and must not parse raw tool payloads.
 - Model-facing tool schemas should keep invalid states small: use explicit required fields, `additionalProperties: false`, and server-owned defaults for caps or runtime context.
 - `turn-logging.mjs` owns the canonical per-turn observability event; route decisions must be mirrored into structured `tool_route_*` fields instead of existing only in freeform runtime logs.
+- Runtime logs are emitted to stdout by default. Set `VOICE_LOG_DIR` for an explicit local file sink; the app should not create a repository `logs/` directory during normal runs.
 - TTS pronunciation fixes belong in `speech-normalization.mjs`, backed by tests.
 
 ## Behavior Invariants
@@ -59,6 +60,8 @@ browser mic PCM
 - Repeat requests replay the last committed assistant answer without a new tool or LLM turn.
 - Conversation memory keeps recent useful turns verbatim and rolls overflowed turns into a bounded system summary instead of silently dropping older context.
 - Tool routing is deterministic before generation: local date/time tools run before MCP or web, MCP routes require explicit private-system signals, web routes are selected by `tool-selector.mjs`, and the final answer model does not silently override the selected route.
+- Product behavior should be solved with harness engineering first: explicit runtime context, deterministic routing, validated data shapes, focused policy modules, compact tool contracts, and tests that lock the intended behavior. Avoid one-off prompt edits, scattered conditionals, or surface-level string patches when the behavior belongs in the harness.
+- Intent routing is classifier-based harness logic. Prefer token sets, phrase lists, ordered-term checks, and small scanners; use regular expressions or other ad hoc text matching only when there is no cleaner structured alternative, or for syntax-shaped parsing/cleanup where a parser would add more complexity than safety.
 - Capability claims are runtime-derived: the model receives a compact capability context for each turn, and direct questions about what the app can do are answered from that context without generation.
 - Voice-session and character behavior are runtime-derived: the model receives compact server-owned dynamic context for selected language, voice response rules, and validated character style on each LLM turn.
 - Every non-ignored turn records the selected route kind, category, selected tools, web-follow-up flag, and query length in its final `voice_turn` log event.

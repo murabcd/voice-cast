@@ -1,3 +1,4 @@
+import { hasAnyPhrase, normalizeIntentText } from "./intent-text.mjs";
 import {
 	classifyAssistantTurn,
 	classifyUserTurn,
@@ -9,13 +10,19 @@ const maxTextLength = 360;
 const maxSummaryLength = 900;
 const maxSummaryTextLength = 120;
 
-const repeatRequestPatterns = [
-	/(?:^|\s)повтори(?:\s|$)/i,
-	/(?:^|\s)(?:скажи|произнеси|повтори)\s+(?:ещ[её]|еще)\s+раз(?:\s|$)/i,
-	/(?:^|\s)что\s+ты\s+(?:сказал|говорил)(?:\s|$)/i,
-	/\brepeat\b/i,
-	/\bsay\s+that\s+again\b/i,
-	/\bwhat\s+did\s+you\s+say\b/i,
+const repeatRequestPhrases = [
+	"repeat",
+	"say that again",
+	"what did you say",
+	"повтори",
+	"повтори еще раз",
+	"повтори ещё раз",
+	"произнеси еще раз",
+	"произнеси ещё раз",
+	"скажи еще раз",
+	"скажи ещё раз",
+	"что ты говорил",
+	"что ты сказал",
 ];
 
 function compactText(value, maxLength = maxTextLength) {
@@ -59,8 +66,10 @@ export function shouldRememberTurn({ user, assistant }) {
 }
 
 export function isRepeatLastAnswerRequest(text) {
-	const prompt = compactText(text);
-	return repeatRequestPatterns.some((pattern) => pattern.test(prompt));
+	return hasAnyPhrase(
+		normalizeIntentText(compactText(text)),
+		repeatRequestPhrases,
+	);
 }
 
 export function createSessionHistory() {

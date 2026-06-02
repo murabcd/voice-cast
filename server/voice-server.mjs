@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-import { mkdir } from "node:fs/promises";
 import WebSocket, { WebSocketServer } from "ws";
 import { McpTools } from "./ai/tools/mcp-tools.mjs";
 import { OllamaWebTools } from "./ai/tools/ollama-web-tools.mjs";
@@ -16,6 +15,7 @@ import { config } from "./voice/config.mjs";
 import { startImmediateTurn } from "./voice/immediate-turn.mjs";
 import { streamLlamaReply } from "./voice/llama.mjs";
 import { log, logError } from "./voice/logger.mjs";
+import { measureMessages } from "./voice/message-metrics.mjs";
 import { openingReplyForSettings } from "./voice/opening-turn.mjs";
 import {
 	shouldClarifyRussianTranscript,
@@ -56,8 +56,6 @@ import {
 	ttsFrameError,
 	ttsFrameStart,
 } from "./voice/wire.mjs";
-
-await mkdir(config.logDir, { recursive: true });
 
 const tts = new SupertonicTtsWorker(config.tts);
 await tts.ready;
@@ -335,6 +333,13 @@ async function handleFinal(ws, transcript) {
 			completeImmediateReply(turn, messages.reply);
 			return;
 		}
+		const messageMetrics = measureMessages(messages);
+		turn.logEvent.llm_messages = messageMetrics.messages;
+		turn.logEvent.llm_chars = messageMetrics.totalChars;
+		turn.logEvent.llm_system_chars = messageMetrics.systemChars;
+		turn.logEvent.llm_user_chars = messageMetrics.userChars;
+		turn.logEvent.llm_assistant_chars = messageMetrics.assistantChars;
+		turn.logEvent.llm_tool_result_chars = messageMetrics.toolResultChars;
 		for await (const delta of streamLlamaReply({
 			url: config.llamaUrl,
 			history: history.messages(),
@@ -347,6 +352,7 @@ async function handleFinal(ws, transcript) {
 			temperature: settings.temperature ?? config.llama.temperature,
 			topP: settings.topP ?? config.llama.topP,
 			repeatPenalty: settings.repeatPenalty ?? config.llama.repeatPenalty,
+			purpose: "final_answer",
 		})) {
 			if (!turnRuntime.accepts(turn)) return;
 			if (!firstDeltaAt) {

@@ -1,60 +1,146 @@
+import {
+	hasAnyPhrase,
+	hasAnyPrefix,
+	hasAnyToken,
+	hasCapitalizedAsciiToken,
+	hasOrderedTerms,
+	hasUppercaseLetterSequence,
+	normalizeIntentText,
+	tokenizeIntentText,
+} from "../intent-text.mjs";
+import {
+	directWeatherPrefixes,
+	directWeatherWords,
+	directWebPhrases,
+	domainSuffixes,
+	externalTopicExactWords,
+	externalTopicPhrases,
+	externalTopicPrefixes,
+	externalTopicWords,
+	greetingWords,
+	localConversationPhrases,
+	localFollowUpPhrases,
+	mutableFactExactWords,
+	mutableFactPrefixes,
+	mutableFactWords,
+	questionWords,
+	referenceFollowUpPhrases,
+	spelledLetterPhrases,
+	webActionWords,
+	webContextWords,
+} from "./tool-routing-lexicon.mjs";
+
+function textParts(text) {
+	const tokens = tokenizeIntentText(text);
+	return { normalized: tokens.join(" "), tokens };
+}
+
+function hasDomainLikeToken(tokens) {
+	return tokens.some((token, index) => {
+		if (!domainSuffixes.has(tokens[index + 1])) return false;
+		return token.length >= 2;
+	});
+}
+
+function hasCompanyLookup(tokens) {
+	return hasOrderedTerms(
+		tokens,
+		[
+			(token) => token === "посмотри" || token === "проверь",
+			(token) => token.startsWith("компани"),
+		],
+		8,
+	);
+}
+
+export function isDirectWebRequest(text) {
+	const { normalized, tokens } = textParts(text);
+	return (
+		hasAnyPhrase(normalized, directWebPhrases) ||
+		hasDomainLikeToken(tokens) ||
+		(hasAnyToken(tokens, webActionWords) &&
+			hasAnyToken(tokens, webContextWords)) ||
+		hasCompanyLookup(tokens) ||
+		hasAnyPrefix(tokens, directWeatherPrefixes) ||
+		hasAnyToken(tokens, directWeatherWords) ||
+		(hasAnyPhrase(normalized, spelledLetterPhrases) &&
+			hasUppercaseLetterSequence(text))
+	);
+}
+
+export function isExternalTopicRequest(text) {
+	const { normalized, tokens } = textParts(text);
+	return (
+		hasAnyToken(tokens, externalTopicWords) ||
+		hasAnyPhrase(normalized, externalTopicPhrases) ||
+		hasAnyPrefix(tokens, externalTopicPrefixes) ||
+		hasAnyToken(tokens, externalTopicExactWords)
+	);
+}
+
+export function isLocalConversationRequest(text) {
+	const { normalized, tokens } = textParts(text);
+	return (
+		greetingWords.has(tokens[0]) ||
+		hasAnyPhrase(normalized, localConversationPhrases)
+	);
+}
+
+export function hasNamedEntity(text) {
+	return hasCapitalizedAsciiToken(text);
+}
+
+export function isQuestion(text) {
+	return hasAnyToken(tokenizeIntentText(text), questionWords);
+}
+
+export function isLocalFollowUp(text) {
+	return hasAnyPhrase(normalizeIntentText(text), localFollowUpPhrases);
+}
+
+export function isMutableFactFollowUp(text) {
+	const tokens = tokenizeIntentText(text);
+	return (
+		hasAnyToken(tokens, mutableFactWords) ||
+		hasAnyToken(tokens, mutableFactExactWords) ||
+		hasAnyPrefix(tokens, mutableFactPrefixes)
+	);
+}
+
+export function isReferenceFollowUp(text) {
+	const normalized = normalizeIntentText(text);
+	return hasAnyPhrase(normalized, referenceFollowUpPhrases);
+}
+
 export const webRoutingPolicy = {
 	routes: [
 		{
 			mode: "direct",
 			category: "fresh_external",
 			toolNames: ["web_search"],
-			patterns: [
-				/\b(search|google|browse|look\s+up|find\s+online|check\s+online)\b/i,
-				/\b[a-z0-9-]+\s*\.\s*(com|ru|io|ai|dev|org|net)\b/i,
-				/(?=.*(зайди|выйди|открой|найди|поищи|загугли|посмотри|провер(?:ь|ить)))(?=.*(интернет|сети|веб|онлайн|сайт|браузер))/i,
-				/(посмотри|провер(?:ь|ить)).{0,40}(?:по\s+)?компани[юиея]/i,
-				/(?:^|[^А-Яа-яЁё])(погод[а-яё]*|температур[а-яё]*|прогноз)(?:$|[^А-Яа-яЁё])/i,
-				/\b(weather|forecast)\b/i,
-				/(букв|латиниц|по буквам).*[A-ZА-Я](?:[\s,.-]+[A-ZА-Я]){2,}/i,
-			],
+			match: isDirectWebRequest,
 		},
 		{
 			mode: "assisted",
 			category: "external_topic",
 			toolNames: ["web_search", "web_fetch"],
-			patterns: [
-				/\b(search|google|browse|web|internet|online|look\s+up|find\s+online)\b/i,
-				/\b(latest|current|recent|today|yesterday|tomorrow|news|price|weather|schedule)\b/i,
-				/\b(company|website|site|docs?|documentation|github|hugging\s*face)\b/i,
-				/(?:^|[^А-Яа-яЁё])(в интернете|в сети|актуальн|свеж|последн|новост|цена|погода|расписан)(?:$|[^А-Яа-яЁё])/i,
-				/(?:^|[^А-Яа-яЁё])(компани[яиею]|сайт|документац|github|hugging\s*face)(?:$|[^А-Яа-яЁё])/i,
-			],
+			match: isExternalTopicRequest,
 		},
 	],
-	localConversationPatterns: [
-		/^(привет|здравствуй|слушай|давай|окей|хорошо|ага|да|нет)\b/i,
-		/\b(расскажи о себе|что ты умеешь|кто ты|ты меня слышишь)\b/i,
-		/^(hi|hello|hey|ok|okay|yes|no)\b/i,
-		/\b(tell me about yourself|what can you do|can you hear me)\b/i,
-	],
-	namedEntityPattern: /[A-Z][A-Za-z0-9-]{2,}/,
-	questionPattern: /\b(what|who|where|when|какой|какая|кто|где|когда|что)\b/i,
-	localFollowUpPatterns: [
-		/\b(what would you say|what did you say|how would you say|how would you pronounce|pronounce|read it|say it)\b/i,
-		/\b(что бы ты сказал|что ты сказал|как бы ты сказал|как произнос|как чита|скажи это|прочитай)\b/i,
-	],
+	isLocalConversationRequest,
+	hasNamedEntity,
+	isQuestion,
+	isLocalFollowUp,
 	followUpRoutes: [
 		{
 			category: "web_followup_mutable_fact",
 			toolNames: ["web_search"],
-			patterns: [
-				/\b(price|pricing|cost|latest|current|recent|today|news|schedule|weather|docs?|documentation|version|release)\b/i,
-				/(?:^|[^А-Яа-яЁё])(цен[а-яё]*|стоимост[а-яё]*|последн[а-яё]*|свеж[а-яё]*|сейчас|сегодня|новост[а-яё]*|расписан[а-яё]*|погод[а-яё]*|документац[а-яё]*|версии|релиз[а-яё]*)/i,
-			],
+			match: isMutableFactFollowUp,
 		},
 		{
 			category: "web_followup_reference",
 			toolNames: ["web_search"],
-			patterns: [
-				/\b(what about|how about|is that still true|source|sources)\b/i,
-				/\b(актуальн|источник|источники|это всё ещё|это все еще)\b/i,
-			],
+			match: isReferenceFollowUp,
 		},
 	],
 };

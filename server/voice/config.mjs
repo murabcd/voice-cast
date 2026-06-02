@@ -84,7 +84,6 @@ export const config = {
 					]
 				: [],
 	},
-	logDir: join(root, "logs"),
 	webDir: join(root, "web"),
 	stt: {
 		bin: join(root, "native/voice-stt-worker/target/release/voice-stt-worker"),

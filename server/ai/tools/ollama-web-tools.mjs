@@ -40,7 +40,7 @@ function truncateText(value, maxLength) {
 		.replaceAll(/\s+/g, " ")
 		.trim();
 	if (text.length <= maxLength) return text;
-	return `${text.slice(0, maxLength)}...`;
+	return text.slice(0, maxLength).trim();
 }
 
 function normalizeSearchResult(result, maxContentChars) {
@@ -98,7 +98,7 @@ export class OllamaWebTools {
 	constructor({
 		apiKey,
 		maxSearchResults = 3,
-		maxSearchResultContentChars = 360,
+		maxSearchResultContentChars = 1200,
 		maxFetchContentChars = 1600,
 		maxFetchLinks = 5,
 	}) {

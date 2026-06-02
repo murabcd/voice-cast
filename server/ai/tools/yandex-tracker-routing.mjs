@@ -1,14 +1,46 @@
+import {
+	hasAnyPrefix,
+	hasAnyToken,
+	tokenizeIntentText,
+} from "../../voice/intent-text.mjs";
 import { parseRussianSpokenNumberPrefix } from "./russian-spoken-number.mjs";
 
-const trackerSignalPattern =
-	/(tracker|yandex|яндекс|трекер|задач[аиу]?|тикет|issue|queue|очеред[ьи])/i;
-const issueKeyPattern = /\b[A-Z][A-Z0-9]+-\d+\b/i;
-const spacedIssueKeyPattern =
-	/\b([A-Z][A-Z0-9]{1,20})\s+(?:номер\s*)?((?:\d[\s.:-]*){1,16})\b/i;
-const bareIssueNumberPattern =
-	/(?:номер(?:ом)?|задач[аиу]?|тикет|issue|ticket)\D{0,24}((?:\d[\s.:-]*){1,16})\b/i;
-const searchPattern =
-	/(find|search|list|найди|найти|поищи|поиск|покажи|список|все|всё|очеред[ьи]|статус|приоритет|пользовател|исполнител|assignee|автор|сколько|количеств)/i;
+const trackerSignalWords = new Set([
+	"issue",
+	"queue",
+	"ticket",
+	"tracker",
+	"yandex",
+	"задача",
+	"задаче",
+	"задачи",
+	"задачу",
+	"тикет",
+	"трекер",
+	"яндекс",
+]);
+const trackerSignalPrefixes = ["очеред"];
+const searchWords = new Set([
+	"assignee",
+	"find",
+	"list",
+	"search",
+	"автор",
+	"все",
+	"всё",
+	"исполнител",
+	"количеств",
+	"найди",
+	"найти",
+	"поищи",
+	"поиск",
+	"покажи",
+	"приоритет",
+	"сколько",
+	"список",
+	"статус",
+]);
+const searchPrefixes = ["очеред", "пользовател"];
 const issueAnchorTerms = [
 	"номером",
 	"номер",
@@ -47,23 +79,23 @@ function normalizeQueue(value) {
 	const queue = String(value ?? "")
 		.trim()
 		.toUpperCase();
-	return /^[A-Z][A-Z0-9]{1,20}$/.test(queue) ? queue : "";
+	if (queue.length < 2 || queue.length > 21) return "";
+	const first = queue[0];
+	if (first < "A" || first > "Z") return "";
+	for (const character of queue) {
+		const isLetter = character >= "A" && character <= "Z";
+		const isDigitValue = isDigit(character);
+		if (!isLetter && !isDigitValue) return "";
+	}
+	return queue;
 }
 
 function normalizeIssueNumber(value) {
-	const number = String(value ?? "").replaceAll(/\D+/g, "");
-	return /^\d{1,8}$/.test(number) ? number : "";
-}
-
-function normalizeIssueNumberText(value) {
-	const numeric = normalizeIssueNumber(value);
-	if (numeric) return numeric;
-	const spoken = parseRussianSpokenNumberPrefix(
-		String(value ?? "")
-			.toLowerCase()
-			.split(" "),
-	);
-	return normalizeIssueNumber(spoken);
+	let number = "";
+	for (const character of String(value ?? "")) {
+		if (isDigit(character)) number += character;
+	}
+	return number.length >= 1 && number.length <= 8 ? number : "";
 }
 
 function isLatinLetter(char) {
@@ -100,7 +132,16 @@ function trackerTokens(text) {
 function tokenNumber(tokens, index) {
 	const token = tokens[index] ?? "";
 	const numeric = normalizeIssueNumber(token);
-	if (numeric) return numeric;
+	if (numeric) {
+		let combined = numeric;
+		for (let cursor = index + 1; cursor < tokens.length; cursor += 1) {
+			const next = normalizeIssueNumber(tokens[cursor]);
+			if (!next) break;
+			combined += next;
+			if (combined.length >= 8) break;
+		}
+		return normalizeIssueNumber(combined) || numeric;
+	}
 	return normalizeIssueNumber(
 		parseRussianSpokenNumberPrefix(tokens.slice(index)),
 	);
@@ -148,32 +189,58 @@ function normalizeKnownQueues({ defaultQueue, limitQueues } = {}) {
 	);
 }
 
-function resolveIssueQueue(value, { defaultQueue, knownQueues }) {
-	const queue = normalizeQueue(value);
-	if (queue && knownQueues.has(queue)) return queue;
-	return normalizeQueue(defaultQueue);
+function hasTrackerSignal(prompt) {
+	const tokens = tokenizeIntentText(prompt);
+	return (
+		hasAnyToken(tokens, trackerSignalWords) ||
+		hasAnyPrefix(tokens, trackerSignalPrefixes)
+	);
+}
+
+function hasSearchSignal(prompt) {
+	const tokens = tokenizeIntentText(prompt);
+	return (
+		hasAnyToken(tokens, searchWords) || hasAnyPrefix(tokens, searchPrefixes)
+	);
+}
+
+function extractDirectIssueKey(text) {
+	const value = String(text ?? "");
+	for (let index = 0; index < value.length; index += 1) {
+		let queue = "";
+		let cursor = index;
+		while (cursor < value.length) {
+			const character = value[cursor].toUpperCase();
+			if (
+				(character >= "A" && character <= "Z") ||
+				(queue && isDigit(character))
+			) {
+				queue += character;
+				cursor += 1;
+				continue;
+			}
+			break;
+		}
+		if (!normalizeQueue(queue)) continue;
+		while (value[cursor] === " ") cursor += 1;
+		if (value[cursor] !== "-") continue;
+		cursor += 1;
+		while (value[cursor] === " ") cursor += 1;
+		let number = "";
+		while (cursor < value.length && isDigit(value[cursor])) {
+			number += value[cursor];
+			cursor += 1;
+		}
+		number = normalizeIssueNumber(number);
+		if (number) return `${queue}-${number}`;
+	}
+	return undefined;
 }
 
 function extractYandexTrackerIssueKey(text, options = {}) {
 	const prompt = String(text ?? "");
-	const knownQueues = normalizeKnownQueues(options);
-	const direct = issueKeyPattern.exec(prompt)?.[0];
-	if (direct) return direct.toUpperCase();
-
-	const spaced = spacedIssueKeyPattern.exec(prompt);
-	if (spaced) {
-		const queue = resolveIssueQueue(spaced[1], {
-			defaultQueue: options.defaultQueue,
-			knownQueues,
-		});
-		const number = normalizeIssueNumber(spaced[2]);
-		if (queue && number) return `${queue}-${number}`;
-	}
-
-	const bare = bareIssueNumberPattern.exec(prompt);
-	const bareNumber = normalizeIssueNumberText(bare?.[1]);
-	const defaultQueue = normalizeQueue(options.defaultQueue);
-	if (bareNumber && defaultQueue) return `${defaultQueue}-${bareNumber}`;
+	const direct = extractDirectIssueKey(prompt);
+	if (direct) return direct;
 
 	const tokenMatch = issueNumberFromTokens(prompt, options);
 	return tokenMatch ? `${tokenMatch.queue}-${tokenMatch.number}` : undefined;
@@ -181,7 +248,7 @@ function extractYandexTrackerIssueKey(text, options = {}) {
 
 export function selectYandexTrackerTools(text, tools, options = {}) {
 	const prompt = String(text ?? "");
-	if (!trackerSignalPattern.test(prompt)) return undefined;
+	if (!hasTrackerSignal(prompt)) return undefined;
 
 	const availableToolNames = new Set((tools ?? []).map((tool) => tool.name));
 	const issueKey = extractYandexTrackerIssueKey(prompt, options);
@@ -196,7 +263,7 @@ export function selectYandexTrackerTools(text, tools, options = {}) {
 	}
 
 	const selected = [];
-	if (searchPattern.test(prompt) || trackerSignalPattern.test(prompt))
+	if (hasSearchSignal(prompt) || hasTrackerSignal(prompt))
 		addIfAvailable(selected, availableToolNames, ["yandex_tracker_search"]);
 	if (!selected.length) return undefined;
 

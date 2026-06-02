@@ -6,6 +6,44 @@ function compactText(value, maxLength = 500) {
 	return `${text.slice(0, maxLength)}...`;
 }
 
+function collapseWhitespace(value) {
+	let text = "";
+	let previousWasSpace = true;
+	for (const char of String(value ?? "")) {
+		const isSpace = char.trim() === "";
+		if (isSpace) {
+			if (!previousWasSpace) text += " ";
+			previousWasSpace = true;
+			continue;
+		}
+		text += char;
+		previousWasSpace = false;
+	}
+	return text.trim();
+}
+
+function displayText(value, maxLength = 2400) {
+	const text = collapseWhitespace(
+		String(value ?? "")
+			.replaceAll("######", "")
+			.replaceAll("#####", "")
+			.replaceAll("####", "")
+			.replaceAll("###", "")
+			.replaceAll("##", "")
+			.replaceAll("#", "")
+			.replaceAll("**", "")
+			.replaceAll("__", "")
+			.replaceAll("*", " ")
+			.replaceAll("_", " ")
+			.replaceAll("`", " ")
+			.replaceAll(">", " ")
+			.replaceAll("~-", " ")
+			.replaceAll("~", " "),
+	);
+	if (text.length <= maxLength) return text;
+	return text.slice(0, maxLength).trim();
+}
+
 export function summarizeToolResults({ calls, results }) {
 	const tools = results.map((entry) => entry.name);
 	const provider = tools.some((name) => name.startsWith("web_"))
@@ -46,9 +84,7 @@ function resultSections({ provider, items, results }) {
 			.map((item) => item.content)
 			.filter(Boolean)
 			.join("\n");
-		return text
-			? [{ label: "Key findings", text: compactText(text, 700) }]
-			: [];
+		return text ? [{ label: "Key findings", text: displayText(text) }] : [];
 	}
 	return [];
 }
@@ -58,7 +94,7 @@ function normalizeSections(value) {
 	return value
 		.map((section) => {
 			const label = compactText(section?.label, 60);
-			const text = compactText(section?.text, 700);
+			const text = displayText(section?.text);
 			if (!label || !text) return undefined;
 			return { label, text };
 		})
@@ -81,7 +117,7 @@ function resultItems(result) {
 	if (Array.isArray(result?.results)) {
 		return result.results.map((item) =>
 			resultItem({
-				content: compactText(item?.content ?? item?.snippet, 520),
+				content: displayText(item?.content ?? item?.snippet),
 				title: compactText(item?.title ?? item?.url ?? "Result", 140),
 				url: compactText(item?.url, 240),
 			}),
@@ -93,7 +129,7 @@ function resultItems(result) {
 	if (result?.title || result?.content) {
 		return [
 			resultItem({
-				content: compactText(result.content, 700),
+				content: displayText(result.content),
 				title: compactText(result.title ?? "Result", 140),
 				url: compactText(result.url, 240),
 			}),
@@ -110,13 +146,13 @@ function resultItems(result) {
 function contentItemToResult(item) {
 	if (item?.type === "resource") {
 		return resultItem({
-			content: compactText(item.resource?.text, 700),
+			content: displayText(item.resource?.text),
 			title: compactText(item.resource?.uri ?? "Resource", 140),
 			url: compactText(item.resource?.uri, 240),
 		});
 	}
 	return {
-		content: compactText(item?.text ?? JSON.stringify(item), 700),
+		content: displayText(item?.text ?? JSON.stringify(item)),
 		title: "Result",
 	};
 }

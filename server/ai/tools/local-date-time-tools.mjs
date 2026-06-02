@@ -4,14 +4,8 @@ import {
 	russianWeekdays,
 } from "../../voice/policy/local-date-time-policy.mjs";
 
-function matchesAny(patterns, text) {
-	return patterns.some((pattern) => pattern.test(text));
-}
-
 function resolveTimeZone(text, fallbackTimeZone) {
-	const known = cityTimeZones.find((city) =>
-		city.patterns.some((pattern) => pattern.test(text)),
-	);
+	const known = cityTimeZones.find((city) => city.match(text));
 	if (known) return known;
 	return {
 		timeZone: fallbackTimeZone || "UTC",
@@ -100,7 +94,7 @@ export function selectLocalDateTimeTool(text) {
 	const prompt = String(text ?? "").trim();
 	if (!prompt) return undefined;
 	const route = localDateTimeRoutes.find((candidate) =>
-		matchesAny(candidate.patterns, prompt),
+		candidate.match(prompt),
 	);
 	if (!route) return undefined;
 	return {

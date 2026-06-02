@@ -70,7 +70,7 @@ async function callDirectWebSearch({
 			type: "tool_result",
 			...summarizeToolResults({
 				calls: [{ name: "web_search", arguments: { query: prompt } }],
-				results: [{ name: "web_search", result: compactResult }],
+				results: [{ name: "web_search", result }],
 			}),
 		});
 		return compactResult;
@@ -380,6 +380,7 @@ export async function prepareToolAugmentedMessages({
 			temperature,
 			topP,
 			repeatPenalty,
+			purpose: "tool_decision",
 		});
 		const calls = parseToolCalls(reply);
 		if (calls.length === 0) {

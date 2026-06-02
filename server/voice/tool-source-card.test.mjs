@@ -72,6 +72,58 @@ describe("tool source cards", () => {
 		});
 	});
 
+	it("cleans markdown-like web snippets for display sections", () => {
+		const summary = summarizeToolResults({
+			calls: [{ name: "web_search", arguments: { query: "Flomni" } }],
+			results: [
+				{
+					name: "web_search",
+					result: {
+						results: [
+							{
+								title: "Products | Flomni",
+								content:
+									"## Умные решения для автоматизации **коммуникаций** в вашей компании",
+								url: "https://example.com/products",
+							},
+						],
+					},
+				},
+			],
+		});
+
+		expect(summary.sections).toEqual([
+			{
+				label: "Key findings",
+				text: "Умные решения для автоматизации коммуникаций в вашей компании",
+			},
+		]);
+	});
+
+	it("keeps source-card display text separate from model context caps", () => {
+		const longText = "Readable context. ".repeat(80);
+		const summary = summarizeToolResults({
+			calls: [{ name: "web_search", arguments: { query: "Flomni" } }],
+			results: [
+				{
+					name: "web_search",
+					result: {
+						results: [
+							{
+								title: "Products | Flomni",
+								content: longText,
+								url: "https://example.com/products",
+							},
+						],
+					},
+				},
+			],
+		});
+
+		expect(summary.sections[0].text).not.toContain("...");
+		expect(summary.sections[0].text.length).toBeGreaterThan(700);
+	});
+
 	it("does not synthesize Tracker sections without adapter-owned sections", () => {
 		const summary = summarizeToolResults({
 			calls: [

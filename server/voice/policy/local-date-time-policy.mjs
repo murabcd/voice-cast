@@ -1,25 +1,78 @@
+import {
+	hasAnyPhrase,
+	hasAnyPrefix,
+	hasAnyToken,
+	normalizeIntentText,
+	tokenizeIntentText,
+} from "../intent-text.mjs";
+
+const londonWords = new Set(["лондон", "london"]);
+const tokyoWords = new Set(["токио", "tokyo"]);
+const todayWords = new Set(["сегодня"]);
+
 export const cityTimeZones = [
 	{
 		timeZone: "Europe/Moscow",
-		patterns: [/москв/i, /\bmoscow\b/i],
+		match: (text) =>
+			hasAnyPrefix(tokenizeIntentText(text), ["москв"]) ||
+			hasAnyPhrase(normalizeIntentText(text), ["moscow"]),
 		names: { ru: "Москве", en: "Moscow" },
 	},
 	{
 		timeZone: "America/New_York",
-		patterns: [/нью[-\s]?йорк/i, /\bnew\s+york\b/i],
+		match: (text) =>
+			hasAnyPhrase(normalizeIntentText(text), ["нью йорк", "new york"]),
 		names: { ru: "Нью-Йорке", en: "New York" },
 	},
 	{
 		timeZone: "Europe/London",
-		patterns: [/лондон/i, /\blondon\b/i],
+		match: (text) => hasAnyToken(tokenizeIntentText(text), londonWords),
 		names: { ru: "Лондоне", en: "London" },
 	},
 	{
 		timeZone: "Asia/Tokyo",
-		patterns: [/токио/i, /\btokyo\b/i],
+		match: (text) => hasAnyToken(tokenizeIntentText(text), tokyoWords),
 		names: { ru: "Токио", en: "Tokyo" },
 	},
 ];
+
+const timeWords = new Set(["time", "час"]);
+const timePrefixes = ["врем"];
+const dateWords = new Set(["date"]);
+const datePrefixes = ["дат"];
+const weekdayWords = new Set(["weekday"]);
+const weekdayPhrases = ["day of week", "день недели"];
+
+function isTimeRequest(text) {
+	const normalized = normalizeIntentText(text);
+	const tokens = tokenizeIntentText(text);
+	return (
+		hasAnyPhrase(normalized, ["current time", "what time", "время на часах"]) ||
+		hasAnyToken(tokens, timeWords) ||
+		hasAnyPrefix(tokens, timePrefixes)
+	);
+}
+
+function isWeekdayRequest(text) {
+	const normalized = normalizeIntentText(text);
+	const tokens = tokenizeIntentText(text);
+	return (
+		hasAnyPhrase(normalized, weekdayPhrases) ||
+		hasAnyToken(tokens, weekdayWords) ||
+		(hasAnyToken(tokens, todayWords) && hasAnyPrefix(tokens, ["день"]))
+	);
+}
+
+function isDateRequest(text) {
+	const normalized = normalizeIntentText(text);
+	const tokens = tokenizeIntentText(text);
+	return (
+		hasAnyPhrase(normalized, ["current date", "today date", "todays date"]) ||
+		hasAnyToken(tokens, dateWords) ||
+		hasAnyPrefix(tokens, datePrefixes) ||
+		(hasAnyToken(tokens, todayWords) && hasAnyPrefix(tokens, ["день"]))
+	);
+}
 
 export const localDateTimeRoutes = [
 	{
@@ -37,12 +90,7 @@ export const localDateTimeRoutes = [
 			required: ["location_text"],
 			additionalProperties: false,
 		},
-		patterns: [
-			/(сколько|какое).{0,24}(сейчас\s+)?врем/i,
-			/(который|какой).{0,16}час/i,
-			/время\s+на\s+часах/i,
-			/\b(what\s+time|current\s+time)\b/i,
-		],
+		match: isTimeRequest,
 	},
 	{
 		toolName: "weekday",
@@ -59,11 +107,7 @@ export const localDateTimeRoutes = [
 			required: ["location_text"],
 			additionalProperties: false,
 		},
-		patterns: [
-			/(какой|какая).{0,24}(день\s+недели|сегодня\s+день)/i,
-			/(день\s+недели|weekday)/i,
-			/\bwhat\s+day\s+is\s+it\b/i,
-		],
+		match: isWeekdayRequest,
 	},
 	{
 		toolName: "current_date",
@@ -80,11 +124,7 @@ export const localDateTimeRoutes = [
 			required: ["location_text"],
 			additionalProperties: false,
 		},
-		patterns: [
-			/(какая|какое|какой).{0,20}(сегодня\s+)?дат/i,
-			/(какой|какая).{0,20}сегодня\s+день/i,
-			/\b(today'?s?\s+date|current\s+date)\b/i,
-		],
+		match: isDateRequest,
 	},
 ];
 

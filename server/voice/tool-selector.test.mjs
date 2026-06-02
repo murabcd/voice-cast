@@ -234,6 +234,19 @@ describe("tool selector", () => {
 		});
 		expect(
 			selectToolsForTurn({
+				text: "Окей, слушай, можешь посмотреть по прайсу? Как дорого, дешево, что они стоят?",
+				registry: registry(),
+				webContext,
+			}),
+		).toMatchObject({
+			kind: "direct_web",
+			category: "web_followup_mutable_fact",
+			toolNames: ["web_search"],
+			query:
+				"Поищи компанию Flomni\nFollow-up: Окей, слушай, можешь посмотреть по прайсу? Как дорого, дешево, что они стоят?",
+		});
+		expect(
+			selectToolsForTurn({
 				text: "source?",
 				registry: registry(),
 				webContext,

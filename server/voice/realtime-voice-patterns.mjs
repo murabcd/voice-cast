@@ -6,9 +6,7 @@ export function shouldWaitForUser(transcript) {
 		.trim();
 	if (!text) return true;
 	if (text.length <= 2) return true;
-	return realtimeVoicePolicy.noOpTranscriptPatterns.some((pattern) =>
-		pattern.test(text),
-	);
+	return realtimeVoicePolicy.isNoOpTranscript(text);
 }
 
 export function shouldClarifyRussianTranscript(transcript) {
@@ -16,9 +14,7 @@ export function shouldClarifyRussianTranscript(transcript) {
 		.replaceAll(/\s+/g, " ")
 		.trim();
 	if (!text) return false;
-	return realtimeVoicePolicy.unclearRussianTranscriptPatterns.some((pattern) =>
-		pattern.test(text),
-	);
+	return realtimeVoicePolicy.isUnclearRussianTranscript(text);
 }
 
 export function pickToolPreamble({ language, turnId = 0 }) {
