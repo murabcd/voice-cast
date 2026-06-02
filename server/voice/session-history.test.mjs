@@ -61,7 +61,15 @@ describe("session history", () => {
 		history.add({
 			user: "Поищи Flomni",
 			assistant: "Нашёл краткое описание.",
-			metadata: { usedWeb: true, toolNames: ["web_search"] },
+			metadata: {
+				usedWeb: true,
+				toolNames: ["web_search"],
+				webTask: {
+					kind: "search",
+					query: "Flomni pricing",
+					tool: "web_search",
+				},
+			},
 		});
 		history.add({
 			user: "Спасибо",
@@ -70,7 +78,15 @@ describe("session history", () => {
 
 		expect(history.webContext()).toMatchObject({
 			user: "Поищи Flomni",
-			metadata: { usedWeb: true, toolNames: ["web_search"] },
+			metadata: {
+				usedWeb: true,
+				toolNames: ["web_search"],
+				webTask: {
+					kind: "search",
+					query: "Flomni pricing",
+					tool: "web_search",
+				},
+			},
 		});
 		expect(history.messages()).toEqual([
 			{ role: "user", content: "Поищи Flomni" },
@@ -78,6 +94,39 @@ describe("session history", () => {
 			{ role: "user", content: "Спасибо" },
 			{ role: "assistant", content: "Пожалуйста." },
 		]);
+	});
+
+	it("exposes the latest character handoff as compact system context", () => {
+		const history = createSessionHistory();
+
+		history.add({
+			user: "Переведи на дискоробота.",
+			assistant: "Переключаю на Disco Robot.",
+			metadata: {
+				characterHandoff: {
+					from_character_id: 1,
+					from_character_name: "Пожарный",
+					from_voice_name: "M1",
+					to_character_id: 3,
+					to_character_name: "Ро́бот",
+					to_voice_name: "M2",
+					user_request: "Переведи на дискоробота.",
+					rationale_for_transfer:
+						"Пользователь явно попросил переключить разговор на персонажа Ро́бот.",
+					conversation_context:
+						"Пожарный принял запрос на переключение и начал передачу.",
+					open_task:
+						"Поздороваться как принимающий персонаж и продолжить с ближайшего запроса пользователя.",
+					assistant_confirmation: "Переключаю на Ро́бота.",
+				},
+			},
+		});
+
+		expect(history.handoffContext()).toEqual({
+			role: "system",
+			content:
+				"Active character handoff: Ро́бот. New character id: 3. New voice: M2. Previous character: Пожарный. User request: Переведи на дискоробота.. Rationale: Пользователь явно попросил переключить разговор на персонажа Ро́бот.. Conversation context: Пожарный принял запрос на переключение и начал передачу.. Open task: Поздороваться как принимающий персонаж и продолжить с ближайшего запроса пользователя.. Handoff confirmation: Переключаю на Ро́бота..",
+		});
 	});
 
 	it("detects repeat requests", () => {

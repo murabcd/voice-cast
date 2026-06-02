@@ -98,6 +98,84 @@ describe("turn runtime", () => {
 		]);
 	});
 
+	it("runs completion hooks after speech is finished and before turn_done", () => {
+		const completed = [];
+		const { runtime } = createRuntime();
+		const ws = createOpenWs();
+		const { turn } = runtime.begin({
+			createLogEvent: () => ({ event: "voice_turn" }),
+			startedAt: 100,
+			transcript: "switch",
+			ws,
+		});
+		turn.onComplete = (_turn, reply) => {
+			completed.push(reply);
+			ws.sent.push({ type: "character_handoff", characterId: 3 });
+		};
+
+		runtime.append(turn, "Переключаю на Disco Robot.");
+		runtime.queue(turn);
+		runtime.markDone(turn);
+
+		expect(runtime.completeIfReady(turn)).toBe(false);
+		runtime.finishQueuedSpeech(turn);
+		expect(runtime.completeIfReady(turn)).toBe(true);
+		expect(completed).toEqual(["Переключаю на Disco Robot."]);
+		expect(ws.sent).toEqual([
+			{ type: "character_handoff", characterId: 3 },
+			{ reply: "Переключаю на Disco Robot.", type: "turn_done" },
+			{ phase: "hearing", type: "state" },
+		]);
+	});
+
+	it("runs after-completion hooks after the turn is cleared", () => {
+		const events = [];
+		const { runtime } = createRuntime();
+		const ws = createOpenWs();
+		const { turn } = runtime.begin({
+			createLogEvent: () => ({ event: "voice_turn" }),
+			startedAt: 100,
+			transcript: "switch",
+			ws,
+		});
+		turn.onAfterComplete = (completedTurn, reply) => {
+			events.push({
+				acceptsCompletedTurn: runtime.accepts(completedTurn),
+				reply,
+			});
+		};
+
+		runtime.append(turn, "Done.");
+		runtime.markDone(turn);
+
+		expect(runtime.completeIfReady(turn)).toBe(true);
+		expect(events).toEqual([{ acceptsCompletedTurn: false, reply: "Done." }]);
+	});
+
+	it("can advance the next turn id without cancelling audio", () => {
+		const { runtime, ttsCancels } = createRuntime();
+		const first = runtime.begin({
+			createLogEvent: () => ({ event: "voice_turn" }),
+			startedAt: 100,
+			transcript: "first",
+			ws: createOpenWs(),
+		});
+		runtime.append(first.turn, "Done.");
+		runtime.markDone(first.turn);
+		expect(runtime.completeIfReady(first.turn)).toBe(true);
+
+		runtime.beginNextTurn();
+		const second = runtime.begin({
+			createLogEvent: () => ({ event: "voice_turn" }),
+			startedAt: 200,
+			transcript: "second",
+			ws: createOpenWs(),
+		});
+
+		expect(second.turnId).toBe(first.turnId + 1);
+		expect(ttsCancels).toEqual([]);
+	});
+
 	it("rejects stale turns after cancellation or replacement", () => {
 		const { runtime, turnLogs, ttsCancels } = createRuntime();
 		const oldTurn = runtime.begin({

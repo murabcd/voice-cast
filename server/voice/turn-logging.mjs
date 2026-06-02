@@ -86,6 +86,8 @@ export function recordToolRoute({ turn, route }) {
 	turn.logEvent.tool_route_category = route.category;
 	turn.logEvent.tool_route_tools = route.toolNames;
 	turn.logEvent.tool_route_tools_count = route.toolNames.length;
+	turn.logEvent.tool_route_arguments = route.arguments;
+	turn.logEvent.tool_route_query = route.query;
 	turn.logEvent.tool_route_query_chars = route.queryChars;
 	turn.logEvent.tool_route_web_followup = route.webFollowUp;
 }

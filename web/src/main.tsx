@@ -122,6 +122,7 @@ function App() {
 	const selectedCharacterPrompt =
 		settings.languageCode === "ru" ? selected.prompts.ru : selected.prompts.en;
 	const voiceSession = useVoiceSession({
+		onCharacterHandoff: (characterId) => setView({ selectedId: characterId }),
 		previewAnimation: view.previewAnimation,
 		selected,
 		selectedLanguage,

@@ -194,9 +194,25 @@ describe("tool selector", () => {
 				registry: registry(),
 			}),
 		).toMatchObject({
-			kind: "tool_assisted_llm",
+			kind: "direct_tool_result",
 			category: "mcp_yandex_tracker",
-			toolNames: ["yandex_tracker_search"],
+			toolName: "yandex_tracker_search",
+			arguments: { query: "Поищи в Яндекс Трекере задачи по TikTok" },
+		});
+
+		expect(
+			selectToolsForTurn({
+				text: "Посмотри в Яндекс Трекере там была задача по компании Уральские авиалинии, что это касательно виджетов.",
+				registry: registry(),
+			}),
+		).toMatchObject({
+			kind: "direct_tool_result",
+			category: "mcp_yandex_tracker",
+			toolName: "yandex_tracker_search",
+			arguments: {
+				query:
+					"Посмотри в Яндекс Трекере там была задача по компании Уральские авиалинии, что это касательно виджетов.",
+			},
 		});
 	});
 
@@ -207,9 +223,9 @@ describe("tool selector", () => {
 				registry: registry(),
 			}),
 		).toMatchObject({
-			kind: "tool_assisted_llm",
+			kind: "direct_tool_result",
 			category: "mcp_yandex_tracker",
-			toolNames: ["yandex_tracker_search"],
+			toolName: "yandex_tracker_search",
 		});
 	});
 
@@ -217,7 +233,15 @@ describe("tool selector", () => {
 		const webContext = {
 			user: "Поищи компанию Flomni",
 			assistant: "Нашёл информацию о Flomni.",
-			metadata: { usedWeb: true, toolNames: ["web_search"] },
+			metadata: {
+				usedWeb: true,
+				toolNames: ["web_search"],
+				webTask: {
+					kind: "search",
+					query: "Flomni pricing",
+					tool: "web_search",
+				},
+			},
 		};
 
 		expect(
@@ -230,7 +254,7 @@ describe("tool selector", () => {
 			kind: "direct_web",
 			category: "web_followup_mutable_fact",
 			toolNames: ["web_search"],
-			query: "Поищи компанию Flomni\nFollow-up: А цены актуальные?",
+			query: "Flomni pricing\nFollow-up: А цены актуальные?",
 		});
 		expect(
 			selectToolsForTurn({
@@ -243,7 +267,7 @@ describe("tool selector", () => {
 			category: "web_followup_mutable_fact",
 			toolNames: ["web_search"],
 			query:
-				"Поищи компанию Flomni\nFollow-up: Окей, слушай, можешь посмотреть по прайсу? Как дорого, дешево, что они стоят?",
+				"Flomni pricing\nFollow-up: Окей, слушай, можешь посмотреть по прайсу? Как дорого, дешево, что они стоят?",
 		});
 		expect(
 			selectToolsForTurn({
@@ -255,6 +279,80 @@ describe("tool selector", () => {
 			kind: "direct_web",
 			category: "web_followup_reference",
 			toolNames: ["web_search"],
+		});
+	});
+
+	it("anchors web follow-ups to the last fetched URL when available", () => {
+		const webContext = {
+			user: "Зайди на hr.flomni.com",
+			assistant: "Проверил страницу.",
+			metadata: {
+				usedWeb: true,
+				toolNames: ["web_fetch"],
+				webTask: {
+					kind: "page",
+					query: "Зайди на hr.flomni.com",
+					tool: "web_fetch",
+					url: "https://hr.flomni.com",
+				},
+			},
+		};
+
+		expect(
+			selectToolsForTurn({
+				text: "А сколько там стоят решения?",
+				registry: registry(),
+				webContext,
+			}),
+		).toMatchObject({
+			kind: "direct_web",
+			category: "web_followup_mutable_fact",
+			query: "https://hr.flomni.com\nFollow-up: А сколько там стоят решения?",
+		});
+	});
+
+	it("fetches explicit URLs directly, including spoken dotted domains", () => {
+		const webContext = {
+			user: "Поищи компанию Flomni",
+			assistant: "Нашёл информацию о Flomni.",
+			metadata: { usedWeb: true, toolNames: ["web_search"] },
+		};
+
+		expect(
+			selectToolsForTurn({
+				text: "Окей, зайди тогда на hr .flomni .com и посмотри, сколько стоят их решения там.",
+				registry: registry(),
+				webContext,
+			}),
+		).toMatchObject({
+			kind: "direct_web_fetch",
+			category: "explicit_url",
+			toolName: "web_fetch",
+			arguments: { url: "https://hr.flomni.com" },
+		});
+
+		expect(
+			selectToolsForTurn({
+				text: "Проверь цены на flomni.com",
+				registry: registry(),
+			}),
+		).toMatchObject({
+			kind: "direct_web_fetch",
+			category: "explicit_url",
+			toolName: "web_fetch",
+			arguments: { url: "https://flomni.com" },
+		});
+
+		expect(
+			selectToolsForTurn({
+				text: "Проверь на сайте hr .flowny .com прайсинг",
+				registry: registry(),
+			}),
+		).toMatchObject({
+			kind: "direct_web_fetch",
+			category: "explicit_url",
+			toolName: "web_fetch",
+			arguments: { url: "https://hr.flomni.com" },
 		});
 	});
 

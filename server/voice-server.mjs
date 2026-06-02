@@ -9,14 +9,22 @@ import {
 	isCapabilityQuestion,
 	runtimeCapabilityContext,
 } from "./voice/capabilities.mjs";
-import { runtimeCharacterContext } from "./voice/character-context.mjs";
+import {
+	resolveCharacterPreset,
+	runtimeCharacterContext,
+} from "./voice/character-context.mjs";
+import {
+	buildCharacterHandoffPayload,
+	characterHandoffReply,
+	selectCharacterHandoff,
+} from "./voice/character-handoff.mjs";
+import { startCharacterHandoffGreeting } from "./voice/character-handoff-greeting.mjs";
 import { parseClientSettingsMessage } from "./voice/client-settings.mjs";
 import { config } from "./voice/config.mjs";
-import { startImmediateTurn } from "./voice/immediate-turn.mjs";
 import { streamLlamaReply } from "./voice/llama.mjs";
 import { log, logError } from "./voice/logger.mjs";
 import { measureMessages } from "./voice/message-metrics.mjs";
-import { openingReplyForSettings } from "./voice/opening-turn.mjs";
+import { startOpeningTurn } from "./voice/opening-turn.mjs";
 import {
 	shouldClarifyRussianTranscript,
 	shouldWaitForUser,
@@ -193,35 +201,21 @@ function completeImmediateReply(turn, reply) {
 	turnRuntime.completeIfReady(turn);
 }
 
-function startOpeningTurn(ws) {
+async function maybeStartOpeningTurn(ws) {
 	if (clientOpeningStarted.has(ws) || ws.readyState !== WebSocket.OPEN) return;
 	const settings = clientSettings.get(ws) ?? {};
 	if (!settings.autoGreetingEnabled) return;
-	const startedAt = Date.now();
 	clientOpeningStarted.add(ws);
-	if (turnRuntime.hasActive()) turnRuntime.cancel("opening turn");
-	const { turnId } = startImmediateTurn({
-		commitHistory: false,
+	await startOpeningTurn({
+		config,
 		log,
-		reply: openingReplyForSettings(settings),
+		logError,
 		sendJson,
+		settings,
 		speakSentence,
-		startedAt,
-		transcript: "[server opening]",
 		turnRuntime,
 		ws,
-		createLogEvent: (newTurn) => ({
-			...createTurnLog({
-				turnId: newTurn.id,
-				startedAt,
-				transcript: "[server opening]",
-				settings,
-				config,
-			}),
-			turn_source: "server_opening",
-		}),
 	});
-	log("turn", `start_opening turn=${turnId}`);
 }
 
 async function handleFinal(ws, transcript) {
@@ -244,6 +238,19 @@ async function handleFinal(ws, transcript) {
 	let firstDeltaAt = 0;
 	const startedAt = Date.now();
 	const settings = clientSettings.get(ws) ?? {};
+	const handoffFromCharacterId = settings.characterId;
+	const handoffFromVoiceName = settings.voiceName;
+	const handoffCharacter = selectCharacterHandoff(
+		normalizedTranscript,
+		handoffFromCharacterId,
+	);
+	const handoffSettings = handoffCharacter
+		? {
+				...settings,
+				characterId: handoffCharacter.id,
+				voiceName: handoffCharacter.voiceName,
+			}
+		: undefined;
 	const history = clientHistory.get(ws) ?? createSessionHistory();
 	const registry = buildVoiceToolRegistry({
 		settings,
@@ -292,6 +299,52 @@ async function handleFinal(ws, transcript) {
 		`start turn=${turnId} transcript=${JSON.stringify(normalizedTranscript)}`,
 	);
 
+	if (handoffCharacter) {
+		const handoffFromCharacter = resolveCharacterPreset(handoffFromCharacterId);
+		const handoffReply = characterHandoffReply({
+			character: handoffCharacter,
+			language: settings.language,
+		});
+		const handoffPayload = buildCharacterHandoffPayload({
+			assistantConfirmation: handoffReply,
+			fromCharacter: handoffFromCharacter,
+			fromVoiceName: handoffFromVoiceName,
+			language: settings.language,
+			toCharacter: handoffCharacter,
+			userRequest: normalizedTranscript,
+		});
+		turn.logEvent.character_handoff = handoffPayload;
+		turn.onComplete = () => {
+			clientSettings.set(ws, handoffSettings);
+			sendJson(ws, {
+				type: "character_handoff",
+				characterId: handoffCharacter.id,
+				characterName: handoffCharacter.name,
+				voiceName: handoffCharacter.voiceName,
+			});
+			log(
+				"settings",
+				`character_handoff character=${handoffCharacter.id} voice=${handoffCharacter.voiceName}`,
+			);
+		};
+		turn.onAfterComplete = () => {
+			void startCharacterHandoffGreeting({
+				config,
+				handoff: handoffPayload,
+				handoffSettings,
+				history,
+				log,
+				logError,
+				sendJson,
+				speakSentence,
+				turnRuntime,
+				ws,
+			});
+		};
+		completeImmediateReply(turn, handoffReply);
+		return;
+	}
+
 	if (
 		settings.language === "ru" &&
 		shouldClarifyRussianTranscript(normalizedTranscript)
@@ -315,9 +368,13 @@ async function handleFinal(ws, transcript) {
 	}
 
 	try {
+		const handoffContext = history.handoffContext();
+		const promptHistory = handoffContext
+			? [handoffContext, ...history.messages()]
+			: history.messages();
 		const messages = await planReply({
 			config,
-			history: history.messages(),
+			history: promptHistory,
 			historyContext: { web: history.webContext() },
 			registry,
 			prompt: normalizedTranscript,
@@ -342,7 +399,7 @@ async function handleFinal(ws, transcript) {
 		turn.logEvent.llm_tool_result_chars = messageMetrics.toolResultChars;
 		for await (const delta of streamLlamaReply({
 			url: config.llamaUrl,
-			history: history.messages(),
+			history: promptHistory,
 			prompt: normalizedTranscript,
 			runtimeContext,
 			signal: controller.signal,
@@ -463,13 +520,12 @@ wss.on("connection", (ws) => {
 					"settings",
 					`language=${parsed.logFields.language} voice=${parsed.logFields.voiceName} character=${parsed.logFields.characterId} auto_greeting=${parsed.logFields.autoGreetingEnabled} prompt=${JSON.stringify(parsed.logFields.systemPromptPreview)}`,
 				);
-				startOpeningTurn(ws);
+				void maybeStartOpeningTurn(ws);
 				return;
 			}
 			if (msg.type === "barge_in") {
 				log("turn", "barge_in");
 				turnRuntime.cancel("barge-in");
-				stt.restart("barge-in");
 				sendJson(ws, { type: "status", text: "barge-in" });
 			}
 		} catch (error) {

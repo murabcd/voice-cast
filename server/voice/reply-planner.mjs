@@ -3,6 +3,7 @@ import { log } from "./logger.mjs";
 import { pickToolPreamble } from "./realtime-voice-patterns.mjs";
 import {
 	prepareDirectToolResultMessages,
+	prepareDirectWebFetchMessages,
 	prepareDirectWebSearchMessages,
 	prepareToolAugmentedMessages,
 } from "./tool-loop.mjs";
@@ -51,6 +52,8 @@ export async function planReply({
 		kind: plan.kind,
 		category: plan.category,
 		toolNames,
+		...(plan.kind === "direct_web_fetch" ? { arguments: plan.arguments } : {}),
+		...(plan.kind === "direct_web" && plan.query ? { query: plan.query } : {}),
 		queryChars: plan.query ? plan.query.length : 0,
 		webFollowUp: plan.category.startsWith("web_followup_"),
 	});
@@ -74,6 +77,7 @@ export async function planReply({
 
 	if (
 		plan.kind !== "direct_web" &&
+		plan.kind !== "direct_web_fetch" &&
 		plan.kind !== "direct_tool_result" &&
 		plan.kind !== "tool_assisted_llm"
 	)
@@ -101,6 +105,19 @@ export async function planReply({
 			signal,
 			systemPrompt: settings.systemPrompt,
 			toolManager: selectedToolManager,
+			onToolActivity,
+			onToolResult,
+		});
+
+	if (plan.kind === "direct_web_fetch")
+		return await prepareDirectWebFetchMessages({
+			prompt,
+			history,
+			runtimeContext,
+			signal,
+			systemPrompt: settings.systemPrompt,
+			toolManager: selectedToolManager,
+			toolArguments: plan.arguments,
 			onToolActivity,
 			onToolResult,
 		});

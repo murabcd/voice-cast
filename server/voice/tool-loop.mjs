@@ -128,6 +128,10 @@ function compactToolPayloadForModel(result) {
 	if (typeof result?.verified === "boolean") payload.verified = result.verified;
 	const reason = compactText(result?.reason, 180);
 	if (reason) payload.reason = reason;
+	const title = compactText(result?.title, 120);
+	if (title) payload.title = title;
+	const content = compactText(result?.content, 720);
+	if (content) payload.content = content;
 	const sections = compactSectionsForModel(result?.sections);
 	if (sections.length > 0) payload.sections = sections;
 	const results = compactResultItemsForModel(result?.results);
@@ -226,7 +230,63 @@ export async function prepareDirectWebSearchMessages({
 	return messages;
 }
 
+export async function prepareDirectWebFetchMessages({
+	history,
+	prompt,
+	systemPrompt,
+	runtimeContext,
+	signal,
+	toolManager,
+	toolArguments,
+	onToolActivity,
+	onToolResult,
+}) {
+	return await prepareSingleToolMessages({
+		finalInstruction:
+			"Сформулируй финальный голосовой ответ только на основе содержимого страницы. Если на странице нет цены, тарифа или стоимости, прямо скажи, что на указанной странице точную цену не удалось найти. Не подменяй ответ общими результатами поиска и не угадывай.",
+		history,
+		prompt,
+		runtimeContext,
+		signal,
+		systemPrompt,
+		toolArguments,
+		toolManager,
+		toolName: "web_fetch",
+		onToolActivity,
+		onToolResult,
+	});
+}
+
 export async function prepareDirectToolResultMessages({
+	history,
+	prompt,
+	systemPrompt,
+	runtimeContext,
+	signal,
+	toolManager,
+	toolName,
+	toolArguments,
+	onToolActivity,
+	onToolResult,
+}) {
+	return await prepareSingleToolMessages({
+		finalInstruction:
+			"Сформулируй финальный голосовой ответ только на основе результата инструмента. Если result.sections, result.results или result.sources не пустые, инструмент нашел задачу; не говори, что задача не найдена. Для Tracker не читай Context дословно: кратко суммируй суть задачи и текущее решение в одном-двух предложениях. About используй как название, Context сожми до смысла, Latest decision добавь только если он есть. Если result.error.code=unauthorized или result.error.code=forbidden, скажи, что Яндекс Трекер отклонил запрос из-за доступа или авторизации. Если результата нет, скажи, что не удалось надежно проверить. Не произноси JSON, XML, URL или технические имена инструментов.",
+		history,
+		prompt,
+		runtimeContext,
+		signal,
+		systemPrompt,
+		toolArguments,
+		toolManager,
+		toolName,
+		onToolActivity,
+		onToolResult,
+	});
+}
+
+async function prepareSingleToolMessages({
+	finalInstruction,
 	history,
 	prompt,
 	systemPrompt,
@@ -258,8 +318,7 @@ export async function prepareDirectToolResultMessages({
 	});
 	messages.push({
 		role: "user",
-		content:
-			"Сформулируй финальный голосовой ответ только на основе результата инструмента. Если result.sections, result.results или result.sources не пустые, инструмент нашел задачу; не говори, что задача не найдена. Для Tracker не читай Context дословно: кратко суммируй суть задачи и текущее решение в одном-двух предложениях. About используй как название, Context сожми до смысла, Latest decision добавь только если он есть. Если result.error.code=unauthorized или result.error.code=forbidden, скажи, что Яндекс Трекер отклонил запрос из-за доступа или авторизации. Если результата нет, скажи, что не удалось надежно проверить. Не произноси JSON, XML, URL или технические имена инструментов.",
+		content: finalInstruction,
 	});
 	return messages;
 }

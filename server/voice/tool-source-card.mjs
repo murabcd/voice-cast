@@ -51,7 +51,7 @@ export function summarizeToolResults({ calls, results }) {
 		: "yandex-tracker";
 	const query = firstQuery(calls);
 	const items = results.flatMap((entry) => resultItems(entry.result));
-	const sources = dedupeSources(items);
+	const sources = dedupeSources([...callSourceItems(calls), ...items]);
 	const sections = resultSections({ provider, items, results });
 	const title = provider === "web" ? "Web results" : "Tracker results";
 	const summary =
@@ -141,6 +141,29 @@ function resultItems(result) {
 			title: "Result",
 		},
 	];
+}
+
+function callSourceItems(calls) {
+	return (calls ?? [])
+		.map((call) => {
+			if (call?.name !== "web_fetch") return undefined;
+			const url = compactText(call?.arguments?.url, 240);
+			if (!url) return undefined;
+			return resultItem({
+				content: "",
+				title: compactText(urlHost(url) ?? url, 140),
+				url,
+			});
+		})
+		.filter(Boolean);
+}
+
+function urlHost(value) {
+	try {
+		return new URL(value).hostname;
+	} catch {
+		return undefined;
+	}
 }
 
 function contentItemToResult(item) {

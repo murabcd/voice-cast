@@ -20,6 +20,9 @@ function selectWebRoute(prompt) {
 }
 
 function buildFollowUpSearchQuery(prompt, webContext) {
+	const webTask = webContext?.metadata?.webTask;
+	if (webTask?.url) return `${webTask.url}\nFollow-up: ${prompt}`;
+	if (webTask?.query) return `${webTask.query}\nFollow-up: ${prompt}`;
 	const previousUser = String(webContext?.user ?? "").trim();
 	if (!previousUser) return prompt;
 	return `${previousUser}\nFollow-up: ${prompt}`;
@@ -37,6 +40,17 @@ function routeWebFollowUp(prompt, webContext) {
 		category: route.category,
 		toolNames: route.toolNames,
 		query: buildFollowUpSearchQuery(prompt, webContext),
+	};
+}
+
+function routeExplicitWebUrl(prompt) {
+	const url = webRoutingPolicy.explicitWebUrl(prompt);
+	if (!url) return undefined;
+	return {
+		kind: "direct_web_fetch",
+		category: "explicit_url",
+		toolName: "web_fetch",
+		arguments: { url },
 	};
 }
 
@@ -83,6 +97,8 @@ export function selectToolsForTurn({
 		return { kind: "llm", category: "conversation", toolNames: [] };
 	const webFollowUp = routeWebFollowUp(prompt, webContext);
 	if (webFollowUp) {
+		const explicitUrlRoute = routeExplicitWebUrl(prompt);
+		if (explicitUrlRoute) return explicitUrlRoute;
 		return {
 			kind: "direct_web",
 			category: webFollowUp.category,
@@ -94,6 +110,8 @@ export function selectToolsForTurn({
 	if (!webRoute)
 		return { kind: "llm", category: "conversation", toolNames: [] };
 	if (webRoute.mode === "direct") {
+		const explicitUrlRoute = routeExplicitWebUrl(prompt);
+		if (explicitUrlRoute) return explicitUrlRoute;
 		return {
 			kind: "direct_web",
 			category: webRoute.category,

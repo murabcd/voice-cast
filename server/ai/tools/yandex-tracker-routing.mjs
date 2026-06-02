@@ -268,8 +268,9 @@ export function selectYandexTrackerTools(text, tools, options = {}) {
 	if (!selected.length) return undefined;
 
 	return {
-		mode: "assisted",
+		mode: "direct",
 		category: "mcp_yandex_tracker",
-		toolNames: selected.slice(0, 3),
+		toolName: selected[0],
+		arguments: { query: prompt },
 	};
 }

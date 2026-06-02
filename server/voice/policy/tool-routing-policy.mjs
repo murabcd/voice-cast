@@ -42,6 +42,42 @@ function hasDomainLikeToken(tokens) {
 	});
 }
 
+function isAsciiDomainLabel(token) {
+	if (token.length < 2 || token.length > 63) return false;
+	for (const character of token) {
+		const isLowerAscii = character >= "a" && character <= "z";
+		const isDigit = character >= "0" && character <= "9";
+		if (!isLowerAscii && !isDigit) return false;
+	}
+	return true;
+}
+
+const domainLabelCorrections = new Map([
+	["floomne", "flomni"],
+	["flomny", "flomni"],
+	["flowny", "flomni"],
+]);
+
+function normalizeDomainLabel(token) {
+	return domainLabelCorrections.get(token) ?? token;
+}
+
+export function explicitWebUrl(text) {
+	const tokens = tokenizeIntentText(text);
+	for (let index = 0; index < tokens.length - 1; index += 1) {
+		if (!domainSuffixes.has(tokens[index + 1])) continue;
+		if (!isAsciiDomainLabel(tokens[index])) continue;
+		const labels = [normalizeDomainLabel(tokens[index]), tokens[index + 1]];
+		for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
+			const token = tokens[cursor];
+			if (!isAsciiDomainLabel(token)) break;
+			labels.unshift(normalizeDomainLabel(token));
+		}
+		return `https://${labels.join(".")}`;
+	}
+	return undefined;
+}
+
 function hasCompanyLookup(tokens) {
 	return hasOrderedTerms(
 		tokens,
@@ -131,6 +167,7 @@ export const webRoutingPolicy = {
 	hasNamedEntity,
 	isQuestion,
 	isLocalFollowUp,
+	explicitWebUrl,
 	followUpRoutes: [
 		{
 			category: "web_followup_mutable_fact",

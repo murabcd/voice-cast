@@ -1,6 +1,7 @@
 import WebSocket from "ws";
 import { cleanLlmText } from "./text.mjs";
 import { emitTurnLog } from "./turn-logging.mjs";
+import { webTaskFromTurnLog } from "./web-task-state.mjs";
 import { sendJson } from "./wire.mjs";
 
 export function createTurnRuntime({
@@ -22,6 +23,10 @@ export function createTurnRuntime({
 
 	function hasActive() {
 		return Boolean(activeTurn);
+	}
+
+	function beginNextTurn() {
+		activeTurnId += 1;
 	}
 
 	function cancel(reason) {
@@ -113,11 +118,16 @@ export function createTurnRuntime({
 						name.startsWith("web_"),
 					),
 					toolNames: turn.logEvent.tool_names ?? [],
+					webTask: webTaskFromTurnLog(turn.logEvent),
+					characterHandoff: turn.logEvent.character_handoff,
 				},
 			});
+		if (typeof turn.onComplete === "function") turn.onComplete(turn, reply);
 		sendJson(turn.ws, { type: "turn_done", reply });
 		setHearing(turn.ws);
 		activeTurn = undefined;
+		if (typeof turn.onAfterComplete === "function")
+			turn.onAfterComplete(turn, reply);
 		return true;
 	}
 
@@ -133,6 +143,7 @@ export function createTurnRuntime({
 		accepts,
 		append,
 		begin,
+		beginNextTurn,
 		cancel,
 		clearAbort,
 		clearIfActive,

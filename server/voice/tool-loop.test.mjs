@@ -8,6 +8,7 @@ import { completeLlamaReply } from "./llama.mjs";
 import {
 	parseToolCalls,
 	prepareDirectToolResultMessages,
+	prepareDirectWebFetchMessages,
 	prepareToolAugmentedMessages,
 	toolResultMessage,
 } from "./tool-loop.mjs";
@@ -65,6 +66,39 @@ describe("SmolLM3 tool call parsing", () => {
 			},
 		]);
 		expect(messages.at(-2).content).toContain("tool_results");
+	});
+
+	it("passes explicitly fetched page content to the final answer prompt", async () => {
+		const calls = [];
+		const messages = await prepareDirectWebFetchMessages({
+			history: [],
+			prompt: "Сколько стоят решения на hr.flomni.com?",
+			systemPrompt: "Answer briefly.",
+			runtimeContext: "",
+			signal: new AbortController().signal,
+			toolManager: {
+				enabled: true,
+				tools: [{ name: "web_fetch", description: "fetch", parameters: {} }],
+				callTool: async (name, args) => {
+					calls.push({ name, args });
+					return {
+						title: "Flomni HR",
+						content: "Тарифы доступны по запросу через форму расчета.",
+						links: [],
+					};
+				},
+			},
+			toolArguments: { url: "https://hr.flomni.com" },
+		});
+
+		expect(calls).toEqual([
+			{ name: "web_fetch", args: { url: "https://hr.flomni.com" } },
+		]);
+		expect(messages.at(-2).content).toContain("Flomni HR");
+		expect(messages.at(-2).content).toContain(
+			"Тарифы доступны по запросу через форму расчета.",
+		);
+		expect(messages.at(-1).content).toContain("содержимого страницы");
 	});
 
 	it("keeps llama tool planning compact for MCP tools", async () => {

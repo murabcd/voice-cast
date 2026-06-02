@@ -31,6 +31,7 @@ const bargeInRmsThreshold = 0.035;
 const bargeInReleaseMs = 800;
 
 interface UseVoiceSessionOptions {
+	onCharacterHandoff?: (characterId: number) => void;
 	previewAnimation: boolean;
 	selected: Character;
 	selectedLanguage: LanguageOption;
@@ -45,6 +46,7 @@ function getPlaybackSources(
 }
 
 export function useVoiceSession({
+	onCharacterHandoff,
 	previewAnimation,
 	selected,
 	selectedLanguage,
@@ -292,8 +294,14 @@ export function useVoiceSession({
 				bargeInDetector.reset();
 				if (!outputActiveRef.current) setPhase("hearing");
 			}
+			if (
+				msg.type === "character_handoff" &&
+				typeof msg.characterId === "number"
+			) {
+				onCharacterHandoff?.(msg.characterId);
+			}
 		},
-		[bargeInDetector, playPcm],
+		[bargeInDetector, onCharacterHandoff, playPcm],
 	);
 
 	const startChat = React.useCallback(async () => {

@@ -100,6 +100,57 @@ describe("tool source cards", () => {
 		]);
 	});
 
+	it("uses requested web fetch URLs as source identities", () => {
+		const summary = summarizeToolResults({
+			calls: [
+				{ name: "web_fetch", arguments: { url: "https://hr.flomni.com" } },
+			],
+			results: [
+				{
+					name: "web_fetch",
+					result: {
+						title: "Pricing | Flomni",
+						content: "Pricing page content.",
+					},
+				},
+			],
+		});
+
+		expect(summary).toMatchObject({
+			provider: "web",
+			query: "https://hr.flomni.com",
+			title: "Web results",
+			tools: ["web_fetch"],
+		});
+		expect(summary.sources[0]).toEqual({
+			title: "hr.flomni.com",
+			url: "https://hr.flomni.com",
+		});
+	});
+
+	it("keeps the requested fetch URL ahead of mismatched page titles", () => {
+		const summary = summarizeToolResults({
+			calls: [
+				{ name: "web_fetch", arguments: { url: "https://hr.flomni.com" } },
+			],
+			results: [
+				{
+					name: "web_fetch",
+					result: {
+						title: "Dina Jordan",
+						content: "Unrelated page content.",
+					},
+				},
+			],
+		});
+
+		expect(summary.sources[0]).toEqual({
+			title: "hr.flomni.com",
+			url: "https://hr.flomni.com",
+		});
+		expect(summary.sources[1]).toEqual({ title: "Dina Jordan" });
+	});
+
 	it("keeps source-card display text separate from model context caps", () => {
 		const longText = "Readable context. ".repeat(80);
 		const summary = summarizeToolResults({

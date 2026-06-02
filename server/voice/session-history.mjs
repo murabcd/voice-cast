@@ -9,6 +9,7 @@ const maxTurns = 4;
 const maxTextLength = 360;
 const maxSummaryLength = 900;
 const maxSummaryTextLength = 120;
+const maxHandoffTextLength = 180;
 
 const repeatRequestPhrases = [
 	"repeat",
@@ -52,6 +53,45 @@ function mergeSummary(currentSummary, turn) {
 	return compactSummary(
 		[currentSummary, turnSummary].filter(Boolean).join(" "),
 	);
+}
+
+function handoffMessage(turn) {
+	const handoff = turn?.metadata?.characterHandoff;
+	if (!handoff?.to_character_name) return undefined;
+	const user = compactText(turn.user, maxHandoffTextLength);
+	const assistant = compactText(turn.assistant, maxHandoffTextLength);
+	return {
+		role: "system",
+		content: [
+			`Active character handoff: ${handoff.to_character_name}.`,
+			`New character id: ${handoff.to_character_id}.`,
+			`New voice: ${handoff.to_voice_name}.`,
+			handoff.from_character_name
+				? `Previous character: ${handoff.from_character_name}.`
+				: "",
+			handoff.user_request
+				? `User request: ${compactText(handoff.user_request, maxHandoffTextLength)}.`
+				: user
+					? `User request: ${user}.`
+					: "",
+			handoff.rationale_for_transfer
+				? `Rationale: ${compactText(handoff.rationale_for_transfer, maxHandoffTextLength)}.`
+				: "",
+			handoff.conversation_context
+				? `Conversation context: ${compactText(handoff.conversation_context, maxHandoffTextLength)}.`
+				: "",
+			handoff.open_task
+				? `Open task: ${compactText(handoff.open_task, maxHandoffTextLength)}.`
+				: "",
+			handoff.assistant_confirmation
+				? `Handoff confirmation: ${compactText(handoff.assistant_confirmation, maxHandoffTextLength)}.`
+				: assistant
+					? `Handoff confirmation: ${assistant}.`
+					: "",
+		]
+			.filter(Boolean)
+			.join(" "),
+	};
 }
 
 export function shouldRememberTurn({ user, assistant }) {
@@ -125,6 +165,13 @@ export function createSessionHistory() {
 		webContext() {
 			for (let index = turns.length - 1; index >= 0; index -= 1) {
 				if (turns[index].metadata?.usedWeb === true) return turns[index];
+			}
+			return undefined;
+		},
+		handoffContext() {
+			for (let index = turns.length - 1; index >= 0; index -= 1) {
+				const message = handoffMessage(turns[index]);
+				if (message) return message;
 			}
 			return undefined;
 		},
