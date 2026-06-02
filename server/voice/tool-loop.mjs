@@ -121,7 +121,7 @@ function compactSectionsForModel(value) {
 	return value
 		.map((section) => {
 			const label = compactText(section?.label, 60);
-			const text = compactText(section?.text, 520);
+			const text = compactText(section?.text, label === "Context" ? 260 : 360);
 			if (!label || !text) return undefined;
 			return { label, text };
 		})
@@ -234,7 +234,7 @@ export async function prepareDirectToolResultMessages({
 	messages.push({
 		role: "user",
 		content:
-			"Сформулируй финальный голосовой ответ только на основе результата инструмента. Если result.sections, result.results или result.sources не пустые, инструмент нашел задачу; не говори, что задача не найдена. Для Tracker кратко перескажи About и Context, а Latest decision добавь только если он есть. Если result.error.code=unauthorized или result.error.code=forbidden, скажи, что Яндекс Трекер отклонил запрос из-за доступа или авторизации. Если результата нет, скажи, что не удалось надежно проверить. Не произноси JSON, XML, URL или технические имена инструментов.",
+			"Сформулируй финальный голосовой ответ только на основе результата инструмента. Если result.sections, result.results или result.sources не пустые, инструмент нашел задачу; не говори, что задача не найдена. Для Tracker не читай Context дословно: кратко суммируй суть задачи и текущее решение в одном-двух предложениях. About используй как название, Context сожми до смысла, Latest decision добавь только если он есть. Если result.error.code=unauthorized или result.error.code=forbidden, скажи, что Яндекс Трекер отклонил запрос из-за доступа или авторизации. Если результата нет, скажи, что не удалось надежно проверить. Не произноси JSON, XML, URL или технические имена инструментов.",
 	});
 	return messages;
 }
@@ -392,12 +392,12 @@ export async function prepareToolAugmentedMessages({
 
 	if (!usedTool) {
 		if (!toolManager.tools.some((tool) => tool.name === "web_search")) {
-			messages.push({
+			baseMessages.push({
 				role: "user",
 				content:
 					"Подходящий инструмент не был вызван. Кратко скажи, что не удалось выполнить запрос через доступные инструменты, и не угадывай результат.",
 			});
-			return messages;
+			return baseMessages;
 		}
 		const compactResult = await callDirectWebSearch({
 			prompt,

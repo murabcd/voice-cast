@@ -303,7 +303,22 @@ textarea:not(:disabled) {
 	gap: 16px;
 }
 
-.source-result-line {
+.source-result-section {
+	display: flex;
+	min-width: 0;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.source-result-section h3 {
+	margin: 0;
+	color: #5d5d5d;
+	font-size: 13px;
+	font-weight: 700;
+	line-height: 1.2;
+}
+
+.source-result-text {
 	min-width: 0;
 	margin: 0;
 	color: #1f1f1f;
@@ -313,13 +328,10 @@ textarea:not(:disabled) {
 	word-break: break-word;
 }
 
-.source-result-line span {
-	display: block;
-	margin-bottom: 8px;
-	color: #5d5d5d;
-	font-size: 13px;
-	font-weight: 700;
-	line-height: 1.2;
+.source-result-text.is-scrollable {
+	max-height: min(36svh, 360px);
+	overflow-y: auto;
+	padding-right: 8px;
 }
 
 .source-links {

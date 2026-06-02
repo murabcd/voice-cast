@@ -61,6 +61,7 @@ browser mic PCM
 - MCP tools run only when configured in the server environment and selected by explicit private-system routing policy.
 - Web follow-ups after a web-grounded turn must carry explicit mutable-fact or source/reference signals; ambiguous related-topic, pronunciation, or meta-speech follow-ups stay off the web path.
 - Tool answers must be grounded in returned tool results.
+- Tool-planning prompts and internal no-tool sentinels are never reused as final-answer context or spoken to the user.
 - Tool result events sent to the browser use a compact source-card contract: provider, title, sections, result items, and sources. Tracker issue lookups expose human sections such as `About`, `Latest decision`, and `Context`; web lookups expose `Key findings`.
 - SmolLM3 tool calls use XML-wrapped JSON in `<tool_call>...</tool_call>`; tool results are returned as compact JSON user messages because this local llama.cpp/SmolLM3 path does not provide hosted OpenAI call IDs or strict tool-result roles.
 - If a selected web route cannot run, the turn fails predictably instead of falling back to stale model memory.

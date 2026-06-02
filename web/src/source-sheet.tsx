@@ -99,10 +99,7 @@ function SourcePanel({
 							<section className="source-result">
 								<div className="source-result-lines">
 									{sections.map((line) => (
-										<p key={line.label} className="source-result-line">
-											<span>{line.label}</span>
-											{line.text}
-										</p>
+										<SourceSection key={line.label} section={line} />
 									))}
 								</div>
 							</section>
@@ -125,6 +122,26 @@ function SourcePanel({
 				)}
 			</div>
 		</>
+	);
+}
+
+function SourceSection({
+	section,
+}: {
+	section: ToolResultSummary["sections"][number];
+}) {
+	const longText = section.text.length > 420;
+	return (
+		<section className="source-result-section">
+			<h3>{section.label}</h3>
+			<p
+				className={
+					longText ? "source-result-text is-scrollable" : "source-result-text"
+				}
+			>
+				{section.text}
+			</p>
+		</section>
 	);
 }
 
