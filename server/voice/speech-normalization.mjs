@@ -17,10 +17,22 @@ const stressMark = "\u0301";
 const cyrillicWordRe =
 	/(?<![А-Яа-яЁё])([А-Яа-яЁё](?:[А-Яа-яЁё]|\u0301)*)(?![А-Яа-яЁё])/g;
 const domainPronunciationRe = createLexiconMatcher(domainPronunciationLexicon);
+const russianAbbreviationExpansions = [
+	{
+		pattern: /(^|[^А-Яа-яЁё])и\s*т\s*\.?\s*д(\.)?($|[^А-Яа-яЁё])/giu,
+		replacement: "и так далее",
+	},
+	{
+		pattern: /(^|[^А-Яа-яЁё])и\s*др(\.)?($|[^А-Яа-яЁё])/giu,
+		replacement: "и другое",
+	},
+];
 
 export function normalizeRussianSpeechText(text) {
 	return applyRussianStressLexicon(
-		applyDomainPronunciationLexicon(String(text ?? "")),
+		applyRussianAbbreviationExpansions(
+			applyDomainPronunciationLexicon(String(text ?? "")),
+		),
 	)
 		.replace(
 			percentRe,
@@ -30,6 +42,17 @@ export function normalizeRussianSpeechText(text) {
 		.replace(latinTokenRe, (token) => pronounceLatinToken(token))
 		.replace(/\s+/g, " ")
 		.trim();
+}
+
+function applyRussianAbbreviationExpansions(text) {
+	return russianAbbreviationExpansions.reduce(
+		(result, { pattern, replacement }) =>
+			result.replace(pattern, (match, prefix, finalDot, suffix) => {
+				const ending = suffix || (finalDot && match.endsWith(".") ? "." : "");
+				return `${prefix}${replacement}${ending}`;
+			}),
+		text,
+	);
 }
 
 function applyDomainPronunciationLexicon(text) {

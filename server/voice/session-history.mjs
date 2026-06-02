@@ -42,11 +42,15 @@ export function isRepeatLastAnswerRequest(text) {
 export function createSessionHistory() {
 	const turns = [];
 	return {
-		add({ user, assistant }) {
+		add({ user, assistant, metadata }) {
 			if (!shouldRememberTurn({ user, assistant })) return;
 			const userText = compactText(user);
 			const assistantText = compactText(assistant);
-			turns.push({ user: userText, assistant: assistantText });
+			turns.push({
+				user: userText,
+				assistant: assistantText,
+				metadata: metadata && typeof metadata === "object" ? metadata : {},
+			});
 			while (turns.length > maxTurns) turns.shift();
 		},
 		lastAssistant() {
@@ -60,6 +64,12 @@ export function createSessionHistory() {
 				{ role: "user", content: turn.user },
 				{ role: "assistant", content: turn.assistant },
 			]);
+		},
+		webContext() {
+			for (let index = turns.length - 1; index >= 0; index -= 1) {
+				if (turns[index].metadata?.usedWeb === true) return turns[index];
+			}
+			return undefined;
 		},
 	};
 }

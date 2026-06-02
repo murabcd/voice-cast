@@ -35,4 +35,26 @@ export const webRoutingPolicy = {
 	],
 	namedEntityPattern: /[A-Z][A-Za-z0-9-]{2,}/,
 	questionPattern: /\b(what|who|where|when|какой|какая|кто|где|когда|что)\b/i,
+	localFollowUpPatterns: [
+		/\b(what would you say|what did you say|how would you say|how would you pronounce|pronounce|read it|say it)\b/i,
+		/\b(что бы ты сказал|что ты сказал|как бы ты сказал|как произнос|как чита|скажи это|прочитай)\b/i,
+	],
+	followUpRoutes: [
+		{
+			category: "web_followup_mutable_fact",
+			toolNames: ["web_search"],
+			patterns: [
+				/\b(price|pricing|cost|latest|current|recent|today|news|schedule|weather|docs?|documentation|version|release)\b/i,
+				/(?:^|[^А-Яа-яЁё])(цен[а-яё]*|стоимост[а-яё]*|последн[а-яё]*|свеж[а-яё]*|сейчас|сегодня|новост[а-яё]*|расписан[а-яё]*|погод[а-яё]*|документац[а-яё]*|версии|релиз[а-яё]*)/i,
+			],
+		},
+		{
+			category: "web_followup_reference",
+			toolNames: ["web_search"],
+			patterns: [
+				/\b(what about|how about|is that still true|source|sources)\b/i,
+				/\b(актуальн|источник|источники|это всё ещё|это все еще)\b/i,
+			],
+		},
+	],
 };

@@ -10,6 +10,7 @@ import { selectToolsForTurn } from "./tool-selector.mjs";
 export async function planReply({
 	config,
 	history,
+	historyContext,
 	prompt,
 	settings,
 	signal,
@@ -27,6 +28,7 @@ export async function planReply({
 	const plan = selectToolsForTurn({
 		text: prompt,
 		registry,
+		webContext: historyContext?.web,
 		webToolsEnabled: settings.webToolsEnabled ?? true,
 	});
 	log(
@@ -55,7 +57,8 @@ export async function planReply({
 		return undefined;
 
 	const selectedToolManager = registry.toolManagerFor(plan.toolNames);
-	if (!selectedToolManager.enabled) return undefined;
+	if (!selectedToolManager.enabled)
+		throw new Error("Selected web tools are not available.");
 
 	const preamble = pickToolPreamble({
 		language: settings.language,
@@ -67,6 +70,7 @@ export async function planReply({
 	if (plan.kind === "direct_web")
 		return await prepareDirectWebSearchMessages({
 			prompt,
+			searchQuery: plan.query,
 			history,
 			signal,
 			systemPrompt: settings.systemPrompt,

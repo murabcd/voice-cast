@@ -18,13 +18,56 @@ const webToolResultInstructions = [
 ].join("\n");
 
 export function parseToolCalls(text) {
-	return [...text.matchAll(toolCallPattern)].map((match) => {
-		const payload = JSON.parse(match[1]);
-		return {
+	const calls = [];
+	for (const match of text.matchAll(toolCallPattern)) {
+		let payload;
+		try {
+			payload = JSON.parse(match[1]);
+		} catch (error) {
+			log(
+				"tool",
+				`parse_failed error=${JSON.stringify(error instanceof Error ? error.message : String(error))}`,
+			);
+			continue;
+		}
+		if (!payload?.name) continue;
+		calls.push({
 			name: payload.name,
 			arguments: payload.arguments ?? {},
-		};
+		});
+	}
+	return calls;
+}
+
+function appendDirectWebSearchResultMessage(messages, compactResult) {
+	messages.push({
+		role: "user",
+		content: toolResultMessage([{ name: "web_search", result: compactResult }]),
 	});
+}
+
+async function callDirectWebSearch({
+	prompt,
+	signal,
+	toolManager,
+	onToolActivity,
+}) {
+	onToolActivity?.({ active: true, name: "web_search" });
+	try {
+		const result = await toolManager.callTool(
+			"web_search",
+			{ query: prompt },
+			{ signal },
+		);
+		const compactResult = compactDirectWebSearchResult(result);
+		log(
+			"tool",
+			`direct_search name=web_search chars=${JSON.stringify(result).length} compact_chars=${JSON.stringify(compactResult).length} preview=${JSON.stringify(compactText(JSON.stringify(compactResult)))}`,
+		);
+		return compactResult;
+	} finally {
+		onToolActivity?.({ active: false, name: "web_search" });
+	}
 }
 
 export function toolResultMessage(results) {
@@ -56,6 +99,7 @@ function compactDirectWebSearchResult(result) {
 export async function prepareDirectWebSearchMessages({
 	history,
 	prompt,
+	searchQuery,
 	systemPrompt,
 	signal,
 	toolManager,
@@ -67,34 +111,21 @@ export async function prepareDirectWebSearchMessages({
 		systemPrompt,
 		history: compactHistory,
 	});
-	if (!toolManager?.enabled) return messages;
-	onToolActivity?.({ active: true, name: "web_search" });
-	try {
-		const result = await toolManager.callTool(
-			"web_search",
-			{ query: prompt },
-			{ signal },
-		);
-		const compactResult = compactDirectWebSearchResult(result);
-		log(
-			"tool",
-			`direct_search name=web_search chars=${JSON.stringify(result).length} compact_chars=${JSON.stringify(compactResult).length} preview=${JSON.stringify(compactText(JSON.stringify(compactResult)))}`,
-		);
-		messages.push({
-			role: "user",
-			content: toolResultMessage([
-				{ name: "web_search", result: compactResult },
-			]),
-		});
-		messages.push({
-			role: "user",
-			content:
-				"Сформулируй финальный голосовой ответ только на основе результатов поиска. Если verified=false или результатов нет, скажи, что не удалось надежно проверить. Не говори, что у тебя нет доступа к интернету.",
-		});
-		return messages;
-	} finally {
-		onToolActivity?.({ active: false, name: "web_search" });
-	}
+	if (!toolManager?.enabled)
+		throw new Error("Selected web search is disabled.");
+	const compactResult = await callDirectWebSearch({
+		prompt: searchQuery ?? prompt,
+		signal,
+		toolManager,
+		onToolActivity,
+	});
+	appendDirectWebSearchResultMessage(messages, compactResult);
+	messages.push({
+		role: "user",
+		content:
+			"Сформулируй финальный голосовой ответ только на основе результатов поиска. Если verified=false или результатов нет, скажи, что не удалось надежно проверить. Не говори, что у тебя нет доступа к интернету.",
+	});
+	return messages;
 }
 
 function compactText(value, maxLength = 500) {
@@ -181,7 +212,24 @@ export async function prepareToolAugmentedMessages({
 }) {
 	const messages = buildVoiceMessages({ prompt, systemPrompt, history });
 	const baseMessages = [...messages];
-	if (!toolManager?.tools?.length || rounds <= 0) return messages;
+	if (!toolManager?.tools?.length)
+		throw new Error("Selected tool route has no available tools.");
+	if (!toolManager.enabled) throw new Error("Selected tool route is disabled.");
+	if (rounds <= 0) {
+		const compactResult = await callDirectWebSearch({
+			prompt,
+			signal,
+			toolManager,
+			onToolActivity,
+		});
+		appendDirectWebSearchResultMessage(baseMessages, compactResult);
+		baseMessages.push({
+			role: "user",
+			content:
+				"Сформулируй финальный голосовой ответ только на основе результатов поиска. Если verified=false или результатов нет, скажи, что не удалось надежно проверить. Не отвечай из памяти.",
+		});
+		return baseMessages;
+	}
 	messages.push({
 		role: "user",
 		content: toolPrimerMessage(toolManager.tools),
@@ -221,7 +269,21 @@ export async function prepareToolAugmentedMessages({
 		messages.push({ role: "user", content: toolResultMessage(results) });
 	}
 
-	if (!usedTool) return baseMessages;
+	if (!usedTool) {
+		const compactResult = await callDirectWebSearch({
+			prompt,
+			signal,
+			toolManager,
+			onToolActivity,
+		});
+		appendDirectWebSearchResultMessage(baseMessages, compactResult);
+		baseMessages.push({
+			role: "user",
+			content:
+				"Сформулируй финальный голосовой ответ только на основе результатов поиска. Если verified=false или результатов нет, скажи, что не удалось надежно проверить. Не отвечай из памяти.",
+		});
+		return baseMessages;
+	}
 	messages.push({
 		role: "user",
 		content:

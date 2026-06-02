@@ -232,6 +232,7 @@ async function handleFinal(ws, transcript) {
 		const messages = await planReply({
 			config,
 			history: history.messages(),
+			historyContext: { web: history.webContext() },
 			prompt: normalizedTranscript,
 			settings,
 			signal: controller.signal,

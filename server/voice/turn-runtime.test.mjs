@@ -48,7 +48,13 @@ describe("turn runtime", () => {
 		expect(runtime.completeIfReady(turn)).toBe(false);
 		expect(runtime.finishQueuedSpeech(turn)).toBe(0);
 		expect(runtime.completeIfReady(turn)).toBe(true);
-		expect(history).toEqual([{ assistant: "First.", user: "hello" }]);
+		expect(history).toEqual([
+			{
+				assistant: "First.",
+				metadata: { toolNames: [], usedWeb: false },
+				user: "hello",
+			},
+		]);
 		expect(turnLogs).toEqual([{ fields: {}, outcome: "success", turnId: 0 }]);
 	});
 

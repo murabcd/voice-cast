@@ -35,6 +35,7 @@ export const localDateTimeRoutes = [
 				},
 			},
 			required: ["location_text"],
+			additionalProperties: false,
 		},
 		patterns: [
 			/(сколько|какое).{0,24}(сейчас\s+)?врем/i,
@@ -56,6 +57,7 @@ export const localDateTimeRoutes = [
 				},
 			},
 			required: ["location_text"],
+			additionalProperties: false,
 		},
 		patterns: [
 			/(какой|какая).{0,24}(день\s+недели|сегодня\s+день)/i,
@@ -76,6 +78,7 @@ export const localDateTimeRoutes = [
 				},
 			},
 			required: ["location_text"],
+			additionalProperties: false,
 		},
 		patterns: [
 			/(какая|какое|какой).{0,20}(сегодня\s+)?дат/i,

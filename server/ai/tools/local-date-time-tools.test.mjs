@@ -1,12 +1,22 @@
 import { describe, expect, it } from "vitest";
 import {
 	callLocalDateTimeTool,
+	localDateTimeNamespace,
 	selectLocalDateTimeTool,
 } from "./local-date-time-tools.mjs";
 
 const fixedNow = new Date("2026-06-01T16:00:00.000Z");
 
 describe("local date time tools", () => {
+	it("exposes strict model-facing schemas", () => {
+		for (const tool of localDateTimeNamespace.tools) {
+			expect(tool.parameters).toMatchObject({
+				required: ["location_text"],
+				additionalProperties: false,
+			});
+		}
+	});
+
 	it("routes current time for requested city without web or LLM", () => {
 		const selected = selectLocalDateTimeTool(
 			"Сколько сейчас времени в Москве?",

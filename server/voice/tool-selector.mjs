@@ -29,11 +29,38 @@ function selectWebRoute(prompt) {
 	);
 }
 
+function buildFollowUpSearchQuery(prompt, webContext) {
+	const previousUser = String(webContext?.user ?? "").trim();
+	if (!previousUser) return prompt;
+	return `${previousUser}\nFollow-up: ${prompt}`;
+}
+
+function routeWebFollowUp(prompt, webContext) {
+	if (!webContext?.metadata?.usedWeb) return undefined;
+	if (matchesAny(webRoutingPolicy.localFollowUpPatterns, prompt))
+		return undefined;
+	const route = webRoutingPolicy.followUpRoutes.find((candidate) =>
+		matchesAny(candidate.patterns, prompt),
+	);
+	if (!route) return undefined;
+	return {
+		mode: "direct",
+		category: route.category,
+		toolNames: route.toolNames,
+		query: buildFollowUpSearchQuery(prompt, webContext),
+	};
+}
+
 export function normalizeWebToolsEnabled(value) {
 	return value !== false && value !== "false" && value !== "off";
 }
 
-export function selectToolsForTurn({ text, registry, webToolsEnabled = true }) {
+export function selectToolsForTurn({
+	text,
+	registry,
+	webContext,
+	webToolsEnabled = true,
+}) {
 	const prompt = String(text ?? "").trim();
 	if (!prompt) return { kind: "none", category: "empty" };
 	const turnType = classifyUserTurn(prompt);
@@ -49,6 +76,15 @@ export function selectToolsForTurn({ text, registry, webToolsEnabled = true }) {
 	}
 	if (!webToolsEnabled)
 		return { kind: "llm", category: "conversation", toolNames: [] };
+	const webFollowUp = routeWebFollowUp(prompt, webContext);
+	if (webFollowUp) {
+		return {
+			kind: "direct_web",
+			category: webFollowUp.category,
+			toolNames: webFollowUp.toolNames,
+			query: webFollowUp.query,
+		};
+	}
 	const webRoute = selectWebRoute(prompt);
 	if (!webRoute)
 		return { kind: "llm", category: "conversation", toolNames: [] };

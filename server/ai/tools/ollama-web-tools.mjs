@@ -123,14 +123,9 @@ export class OllamaWebTools {
 									type: "string",
 									description: "The concise web search query.",
 								},
-								max_results: {
-									type: "integer",
-									description: "Maximum number of search results to return.",
-									minimum: 1,
-									maximum: 10,
-								},
 							},
 							required: ["query"],
+							additionalProperties: false,
 						},
 					},
 					{
@@ -146,6 +141,7 @@ export class OllamaWebTools {
 								},
 							},
 							required: ["url"],
+							additionalProperties: false,
 						},
 					},
 				]

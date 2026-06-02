@@ -96,6 +96,12 @@ export function createTurnRuntime({
 		addHistory(turn.ws, {
 			user: turn.userTranscript,
 			assistant: reply,
+			metadata: {
+				usedWeb: (turn.logEvent.tool_names ?? []).some((name) =>
+					name.startsWith("web_"),
+				),
+				toolNames: turn.logEvent.tool_names ?? [],
+			},
 		});
 		sendJson(turn.ws, { type: "turn_done", reply });
 		setHearing(turn.ws);

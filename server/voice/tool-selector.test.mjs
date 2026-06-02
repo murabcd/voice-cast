@@ -72,6 +72,96 @@ describe("tool selector", () => {
 		});
 	});
 
+	it("forces web search for follow-ups after a web-grounded turn", () => {
+		const webContext = {
+			user: "Поищи компанию Flomni",
+			assistant: "Нашёл информацию о Flomni.",
+			metadata: { usedWeb: true, toolNames: ["web_search"] },
+		};
+
+		expect(
+			selectToolsForTurn({
+				text: "А цены актуальные?",
+				registry: registry(),
+				webContext,
+			}),
+		).toMatchObject({
+			kind: "direct_web",
+			category: "web_followup_mutable_fact",
+			toolNames: ["web_search"],
+			query: "Поищи компанию Flomni\nFollow-up: А цены актуальные?",
+		});
+		expect(
+			selectToolsForTurn({
+				text: "source?",
+				registry: registry(),
+				webContext,
+			}),
+		).toMatchObject({
+			kind: "direct_web",
+			category: "web_followup_reference",
+			toolNames: ["web_search"],
+		});
+	});
+
+	it("keeps ambiguous follow-ups after web turns local", () => {
+		const webContext = {
+			user: "Поищи компанию Flomni",
+			assistant: "Нашёл информацию о Flomni.",
+			metadata: { usedWeb: true, toolNames: ["web_search"] },
+		};
+
+		expect(
+			selectToolsForTurn({
+				text: "and?",
+				registry: registry(),
+				webContext,
+			}),
+		).toMatchObject({
+			kind: "llm",
+			toolNames: [],
+		});
+		expect(
+			selectToolsForTurn({
+				text: "а что?",
+				registry: registry(),
+				webContext,
+			}),
+		).toMatchObject({
+			kind: "llm",
+			toolNames: [],
+		});
+	});
+
+	it("keeps pronunciation and meta follow-ups after web turns on the LLM path", () => {
+		const webContext = {
+			user: "Поищи информацию о компании Flomni",
+			assistant: "Нашёл информацию о Flomni.",
+			metadata: { usedWeb: true, toolNames: ["web_search"] },
+		};
+
+		expect(
+			selectToolsForTurn({
+				text: "what would you say?",
+				registry: registry(),
+				webContext,
+			}),
+		).toMatchObject({
+			kind: "llm",
+			toolNames: [],
+		});
+		expect(
+			selectToolsForTurn({
+				text: "как бы ты это произнес?",
+				registry: registry(),
+				webContext,
+			}),
+		).toMatchObject({
+			kind: "none",
+			category: "pronunciation_feedback",
+		});
+	});
+
 	it("keeps local voice pipeline questions away from tools", () => {
 		expect(
 			selectToolsForTurn({

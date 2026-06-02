@@ -82,6 +82,15 @@ describe("Russian speech normalization", () => {
 		);
 	});
 
+	it("expands Russian abbreviations that TTS reads letter-by-letter", () => {
+		expect(
+			normalizeRussianSpeechText("Интеграции, виджеты и др. функции, и т.д."),
+		).toBe("Интеграции, ви́джеты и другое функции, и так далее.");
+		expect(normalizeRussianSpeechText("Каналы и тд доступны.")).toBe(
+			"Каналы и так далее доступны.",
+		);
+	});
+
 	it("keeps the Russian stress lexicon normalized", () => {
 		for (const [source, stressed] of russianStressLexicon) {
 			expect(validateRussianStressEntry(source, stressed)).toBeUndefined();
@@ -91,6 +100,7 @@ describe("Russian speech normalization", () => {
 	it("keeps ordinary Russian stress separate from pronunciation policy rewrites", () => {
 		expect(russianStressLexicon.has("нужна")).toBe(true);
 		expect(russianStressLexicon.has("десятью")).toBe(true);
+		expect(russianStressLexicon.has("включая")).toBe(true);
 		expect(russianStressLexicon.has("адрес")).toBe(true);
 		expect(russianStressLexicon.has("уральские авиалинии")).toBe(false);
 		expect(domainPronunciationLexicon.has("уральские авиалинии")).toBe(true);

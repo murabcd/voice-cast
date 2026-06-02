@@ -44,6 +44,31 @@ describe("session history", () => {
 		).toBe(true);
 	});
 
+	it("tracks the latest web-grounded turn without exposing metadata as chat text", () => {
+		const history = createSessionHistory();
+
+		history.add({
+			user: "Поищи Flomni",
+			assistant: "Нашёл краткое описание.",
+			metadata: { usedWeb: true, toolNames: ["web_search"] },
+		});
+		history.add({
+			user: "Спасибо",
+			assistant: "Пожалуйста.",
+		});
+
+		expect(history.webContext()).toMatchObject({
+			user: "Поищи Flomni",
+			metadata: { usedWeb: true, toolNames: ["web_search"] },
+		});
+		expect(history.messages()).toEqual([
+			{ role: "user", content: "Поищи Flomni" },
+			{ role: "assistant", content: "Нашёл краткое описание." },
+			{ role: "user", content: "Спасибо" },
+			{ role: "assistant", content: "Пожалуйста." },
+		]);
+	});
+
 	it("detects repeat requests", () => {
 		expect(isRepeatLastAnswerRequest("Повтори еще, что ты сказал")).toBe(true);
 		expect(isRepeatLastAnswerRequest("скажи ещё раз")).toBe(true);

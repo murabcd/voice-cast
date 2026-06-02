@@ -2,6 +2,30 @@ import { describe, expect, it, vi } from "vitest";
 import { OllamaWebTools } from "./ollama-web-tools.mjs";
 
 describe("OllamaWebTools", () => {
+	it("exposes strict model-facing tool schemas", () => {
+		const tools = new OllamaWebTools({ apiKey: "test" });
+
+		expect(tools.tools).toMatchObject([
+			{
+				name: "web_search",
+				parameters: {
+					required: ["query"],
+					additionalProperties: false,
+				},
+			},
+			{
+				name: "web_fetch",
+				parameters: {
+					required: ["url"],
+					additionalProperties: false,
+				},
+			},
+		]);
+		expect(tools.tools[0].parameters.properties).not.toHaveProperty(
+			"max_results",
+		);
+	});
+
 	it("caps search result count and snippet size for local context", async () => {
 		const fetchMock = vi.fn(async () => ({
 			ok: true,
