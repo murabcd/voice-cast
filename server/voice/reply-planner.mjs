@@ -31,10 +31,19 @@ export async function planReply({
 		webContext: historyContext?.web,
 		webToolsEnabled: settings.webToolsEnabled ?? true,
 	});
+	const toolNames = plan.toolNames ?? (plan.toolName ? [plan.toolName] : []);
 	log(
 		"tool",
-		`selection kind=${plan.kind} category=${plan.category} tools=${plan.toolNames?.length ?? (plan.toolName ? 1 : 0)} web_enabled=${toolManager.enabled} user_enabled=${settings.webToolsEnabled ?? true}`,
+		`selection kind=${plan.kind} category=${plan.category} tools=${toolNames.length} web_enabled=${toolManager.enabled} user_enabled=${settings.webToolsEnabled ?? true}`,
 	);
+	emit({
+		type: "tool_route",
+		kind: plan.kind,
+		category: plan.category,
+		toolNames,
+		queryChars: plan.query ? plan.query.length : 0,
+		webFollowUp: plan.category.startsWith("web_followup_"),
+	});
 
 	if (plan.kind === "direct_tool") {
 		onToolActivity({ active: true, name: plan.toolName });

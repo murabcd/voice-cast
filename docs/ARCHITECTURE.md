@@ -41,6 +41,7 @@ browser mic PCM
 - `tool-selector.mjs` owns turn-level routing decisions; policy files provide static matching data, and tool registry owns executable tool namespaces.
 - Tool code owns external API shapes and should return compact structured objects.
 - Model-facing tool schemas should keep invalid states small: use explicit required fields, `additionalProperties: false`, and server-owned defaults for caps or runtime context.
+- `turn-logging.mjs` owns the canonical per-turn observability event; route decisions must be mirrored into structured `tool_route_*` fields instead of existing only in freeform runtime logs.
 - TTS pronunciation fixes belong in `speech-normalization.mjs`, backed by tests.
 
 ## Behavior Invariants
@@ -50,6 +51,7 @@ browser mic PCM
 - Empty, filler, silence, or background-noise transcripts do not create LLM turns.
 - Repeat requests replay the last committed assistant answer without a new tool or LLM turn.
 - Tool routing is deterministic before generation: local date/time tools run before web, web routes are selected by `tool-selector.mjs`, and the final answer model does not silently override the selected route.
+- Every non-ignored turn records the selected route kind, category, selected tools, web-follow-up flag, and query length in its final `voice_turn` log event.
 - Web tools run only when enabled by settings and selected by the routing policy.
 - Web follow-ups after a web-grounded turn must carry explicit mutable-fact or source/reference signals; ambiguous related-topic, pronunciation, or meta-speech follow-ups stay off the web path.
 - Tool answers must be grounded in returned tool results.

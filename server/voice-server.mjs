@@ -32,6 +32,7 @@ import {
 	recordQueuedSpeech,
 	recordToolCall,
 	recordToolPreamble,
+	recordToolRoute,
 } from "./voice/turn-logging.mjs";
 import { createTurnRuntime } from "./voice/turn-runtime.mjs";
 import {
@@ -306,6 +307,10 @@ function createToolPlanningEventHandler({ startedAt, turn, ws }) {
 		sendToolState: (state) => sendJson(ws, { type: "web_search", ...state }),
 	});
 	return (event) => {
+		if (event.type === "tool_route") {
+			recordToolRoute({ turn, route: event });
+			return;
+		}
 		if (event.type === "preamble") {
 			recordToolPreamble({ turn, sentence: event.sentence, startedAt });
 			speakSentence(turn, event.sentence);

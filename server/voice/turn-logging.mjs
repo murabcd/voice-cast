@@ -80,6 +80,15 @@ export function recordToolPreamble({ turn, sentence, startedAt }) {
 	turn.logEvent.tool_preamble_ms = Date.now() - startedAt;
 }
 
+export function recordToolRoute({ turn, route }) {
+	turn.logEvent.tool_route_kind = route.kind;
+	turn.logEvent.tool_route_category = route.category;
+	turn.logEvent.tool_route_tools = route.toolNames;
+	turn.logEvent.tool_route_tools_count = route.toolNames.length;
+	turn.logEvent.tool_route_query_chars = route.queryChars;
+	turn.logEvent.tool_route_web_followup = route.webFollowUp;
+}
+
 export function recordToolCall(turn, name) {
 	turn.logEvent.tool_calls_count += 1;
 	if (!turn.logEvent.tool_names.includes(name))

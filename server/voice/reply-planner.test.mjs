@@ -42,6 +42,14 @@ describe("tool planning policy", () => {
 			toolName: "current_time",
 		});
 		expect(events).toEqual([
+			{
+				type: "tool_route",
+				kind: "direct_tool",
+				category: "local_datetime",
+				toolNames: ["current_time"],
+				queryChars: 0,
+				webFollowUp: false,
+			},
 			{ type: "tool_activity", active: true, name: "current_time" },
 			{ type: "tool_activity", active: false, name: "current_time" },
 		]);
