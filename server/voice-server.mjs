@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { mkdir } from "node:fs/promises";
 import WebSocket, { WebSocketServer } from "ws";
+import { McpTools } from "./ai/tools/mcp-tools.mjs";
 import { OllamaWebTools } from "./ai/tools/ollama-web-tools.mjs";
 import { parseClientSettingsMessage } from "./voice/client-settings.mjs";
 import { config } from "./voice/config.mjs";
@@ -63,6 +64,18 @@ log(
 		? `ollama web tools enabled tools=${webTools.tools.length}`
 		: "ollama web tools disabled: OLLAMA_API_KEY is not configured",
 );
+const mcpTools = new McpTools(config.mcp);
+try {
+	await mcpTools.connect();
+	log(
+		"tool",
+		mcpTools.enabled
+			? `mcp tools enabled tools=${mcpTools.tools.length}`
+			: "mcp tools disabled: no configured servers",
+	);
+} catch (error) {
+	logError("tool", "mcp tools failed to start", error);
+}
 
 const server = createStaticServer(config);
 const wss = new WebSocketServer({ server });
@@ -83,7 +96,8 @@ const turnRuntime = createTurnRuntime({
 	addHistory: (ws, item) => clientHistory.get(ws)?.add(item),
 	log,
 	resetToolActivity,
-	sendToolState: (ws, state) => sendJson(ws, { type: "web_search", ...state }),
+	sendToolState: (ws, state) =>
+		sendJson(ws, { type: "tool_activity", ...state }),
 	setHearing: (ws) => sendJson(ws, { type: "state", phase: "hearing" }),
 	tts,
 });
@@ -240,6 +254,7 @@ async function handleFinal(ws, transcript) {
 			settings,
 			signal: controller.signal,
 			toolManager: webTools,
+			mcpTools,
 			turnId,
 			onEvent: createToolPlanningEventHandler({ startedAt, turn, ws }),
 		});
@@ -290,7 +305,7 @@ async function handleFinal(ws, transcript) {
 				: { error_message: String(error) }),
 		});
 		logError("turn", "voice turn failed", error, { turn_id: turnId });
-		sendJson(ws, { type: "web_search", active: false });
+		sendJson(ws, { type: "tool_activity", active: false });
 		sendJson(ws, {
 			type: "error",
 			message: error instanceof Error ? error.message : String(error),
@@ -306,7 +321,7 @@ function createToolPlanningEventHandler({ startedAt, turn, ws }) {
 		turn,
 		canAccept: () => turnRuntime.accepts(turn),
 		recordToolCall,
-		sendToolState: (state) => sendJson(ws, { type: "web_search", ...state }),
+		sendToolState: (state) => sendJson(ws, { type: "tool_activity", ...state }),
 	});
 	return (event) => {
 		if (event.type === "tool_route") {
@@ -319,6 +334,7 @@ function createToolPlanningEventHandler({ startedAt, turn, ws }) {
 			return;
 		}
 		if (event.type === "tool_activity") handleToolActivity(event);
+		if (event.type === "tool_result") sendJson(ws, event);
 	};
 }
 
@@ -404,10 +420,12 @@ function shutdown(signal) {
 	wss.close();
 	server.close(() => {
 		tts.shutdown();
+		void mcpTools.close();
 		process.exit(0);
 	});
 	setTimeout(() => {
 		tts.shutdown();
+		void mcpTools.close();
 		process.exit(1);
 	}, 3000).unref();
 }

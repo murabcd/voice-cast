@@ -2,6 +2,7 @@ import { buildVoiceToolRegistry } from "../ai/tools/tool-registry.mjs";
 import { log } from "./logger.mjs";
 import { pickToolPreamble } from "./realtime-voice-patterns.mjs";
 import {
+	prepareDirectToolResultMessages,
 	prepareDirectWebSearchMessages,
 	prepareToolAugmentedMessages,
 } from "./tool-loop.mjs";
@@ -15,15 +16,20 @@ export async function planReply({
 	settings,
 	signal,
 	toolManager,
+	mcpTools,
 	turnId,
 	onEvent,
 }) {
 	const emit = (event) => onEvent?.(event);
 	const onToolActivity = (state) => emit({ type: "tool_activity", ...state });
+	const onToolResult = (event) => emit(event);
 
 	const registry = buildVoiceToolRegistry({
 		settings,
 		webTools: toolManager,
+		mcpTools,
+		trackerDefaultQueue: config.mcp?.trackerDefaultQueue,
+		trackerLimitQueues: config.mcp?.trackerLimitQueues,
 	});
 	const plan = selectToolsForTurn({
 		text: prompt,
@@ -34,7 +40,7 @@ export async function planReply({
 	const toolNames = plan.toolNames ?? (plan.toolName ? [plan.toolName] : []);
 	log(
 		"tool",
-		`selection kind=${plan.kind} category=${plan.category} tools=${toolNames.length} web_enabled=${toolManager.enabled} user_enabled=${settings.webToolsEnabled ?? true}`,
+		`selection kind=${plan.kind} category=${plan.category} tools=${toolNames.length} web_enabled=${toolManager.enabled} mcp_enabled=${mcpTools?.enabled === true} user_enabled=${settings.webToolsEnabled ?? true}`,
 	);
 	emit({
 		type: "tool_route",
@@ -62,12 +68,18 @@ export async function planReply({
 		}
 	}
 
-	if (plan.kind !== "direct_web" && plan.kind !== "tool_assisted_llm")
+	if (
+		plan.kind !== "direct_web" &&
+		plan.kind !== "direct_tool_result" &&
+		plan.kind !== "tool_assisted_llm"
+	)
 		return undefined;
 
-	const selectedToolManager = registry.toolManagerFor(plan.toolNames);
+	const selectedToolManager = registry.toolManagerFor(
+		plan.toolNames ?? [plan.toolName],
+	);
 	if (!selectedToolManager.enabled)
-		throw new Error("Selected web tools are not available.");
+		throw new Error("Selected tools are not available.");
 
 	const preamble = pickToolPreamble({
 		language: settings.language,
@@ -85,6 +97,20 @@ export async function planReply({
 			systemPrompt: settings.systemPrompt,
 			toolManager: selectedToolManager,
 			onToolActivity,
+			onToolResult,
+		});
+
+	if (plan.kind === "direct_tool_result")
+		return await prepareDirectToolResultMessages({
+			prompt,
+			history,
+			signal,
+			systemPrompt: settings.systemPrompt,
+			toolManager: selectedToolManager,
+			toolName: plan.toolName,
+			toolArguments: plan.arguments,
+			onToolActivity,
+			onToolResult,
 		});
 
 	return await prepareToolAugmentedMessages({
@@ -101,5 +127,6 @@ export async function planReply({
 		rounds: config.llama.toolRounds,
 		decisionMaxTokens: config.llama.toolDecisionMaxTokens,
 		onToolActivity,
+		onToolResult,
 	});
 }

@@ -4,7 +4,13 @@ vi.mock("./llama.mjs", () => ({
 	completeLlamaReply: vi.fn(async () => "NO_TOOL"),
 }));
 
-import { parseToolCalls, prepareToolAugmentedMessages } from "./tool-loop.mjs";
+import { completeLlamaReply } from "./llama.mjs";
+import {
+	parseToolCalls,
+	prepareDirectToolResultMessages,
+	prepareToolAugmentedMessages,
+	toolResultMessage,
+} from "./tool-loop.mjs";
 
 describe("SmolLM3 tool call parsing", () => {
 	it("extracts XML-wrapped JSON tool calls", () => {
@@ -58,6 +64,132 @@ describe("SmolLM3 tool call parsing", () => {
 				args: { query: "What is the latest SmolLM3 release?" },
 			},
 		]);
-		expect(messages.at(-2).content).toContain("web_tool_results");
+		expect(messages.at(-2).content).toContain("tool_results");
+	});
+
+	it("keeps llama tool planning compact for MCP tools", async () => {
+		vi.mocked(completeLlamaReply).mockResolvedValueOnce("NO_TOOL");
+		await prepareToolAugmentedMessages({
+			llamaUrl: "http://127.0.0.1:18081",
+			history: [],
+			prompt: "Найди тикет 8508 в Яндекс Трекере.",
+			systemPrompt: "Answer briefly.",
+			signal: new AbortController().signal,
+			toolManager: {
+				enabled: true,
+				tools: [
+					{
+						name: "issues_find",
+						description: "x".repeat(1000),
+						parameters: {
+							properties: {
+								query: { type: "string" },
+								queue: { type: "string" },
+							},
+						},
+					},
+				],
+				callTool: async () => {
+					throw new Error("should not call tool");
+				},
+			},
+			maxTokens: 64,
+			temperature: 0,
+			topP: 1,
+			repeatPenalty: 1,
+			rounds: 1,
+			decisionMaxTokens: 16,
+		});
+
+		const decisionRequest = vi
+			.mocked(completeLlamaReply)
+			.mock.calls.at(-1)?.[0];
+		const primerMessage = decisionRequest?.messages.find((message) =>
+			message.content.includes("Доступные инструменты:"),
+		);
+		expect(decisionRequest).toBeDefined();
+		expect(decisionRequest?.tools).toBeUndefined();
+		expect(primerMessage?.content).toContain("xxx...");
+		expect(primerMessage?.content).not.toContain("x".repeat(300));
+	});
+
+	it("keeps model-facing tool results compact and section-oriented", () => {
+		const message = toolResultMessage([
+			{
+				arguments: { issueKey: "PROJ-4507" },
+				name: "yandex_tracker_get_issue",
+				result: {
+					results: [
+						{
+							title: "PROJ-4507",
+							content: "About: Operators cannot choose template types",
+							url: "https://tracker.yandex.ru/PROJ-4507",
+						},
+					],
+					sections: [
+						{
+							label: "About",
+							text: "Operators cannot choose template types",
+						},
+						{
+							label: "Context",
+							text: "x".repeat(1200),
+						},
+					],
+					sources: [
+						{
+							title: "PROJ-4507",
+							url: "https://tracker.yandex.ru/PROJ-4507",
+						},
+					],
+				},
+			},
+		]);
+
+		expect(message).toContain('"sections"');
+		expect(message).toContain('"sources":["PROJ-4507"]');
+		expect(message).not.toContain("tracker.yandex.ru");
+		expect(message).not.toContain("x".repeat(800));
+	});
+
+	it("tells the final model that non-empty Tracker sections mean the issue was found", async () => {
+		const messages = await prepareDirectToolResultMessages({
+			history: [],
+			prompt: "Найди задачу 45.07",
+			systemPrompt: "Answer briefly.",
+			signal: new AbortController().signal,
+			toolManager: {
+				enabled: true,
+				tools: [
+					{
+						name: "yandex_tracker_get_issue",
+						description: "get issue",
+						parameters: {},
+					},
+				],
+				callTool: async () => ({
+					results: [
+						{
+							title: "PROJ-4507",
+							content: "About: Operators cannot choose template types",
+						},
+					],
+					sections: [
+						{
+							label: "About",
+							text: "Operators cannot choose template types",
+						},
+					],
+					sources: [{ title: "PROJ-4507" }],
+				}),
+			},
+			toolName: "yandex_tracker_get_issue",
+			toolArguments: { issueKey: "PROJ-4507" },
+		});
+
+		expect(messages.at(-1)?.content).toContain("инструмент нашел задачу");
+		expect(messages.at(-2)?.content).toContain(
+			"Operators cannot choose template types",
+		);
 	});
 });

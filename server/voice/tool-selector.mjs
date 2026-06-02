@@ -74,6 +74,22 @@ export function selectToolsForTurn({
 			arguments: localTool.arguments,
 		};
 	}
+	const mcpRoute = registry.selectMcpTools(prompt);
+	if (mcpRoute) {
+		if (mcpRoute.mode === "direct") {
+			return {
+				kind: "direct_tool_result",
+				category: mcpRoute.category,
+				toolName: mcpRoute.toolName,
+				arguments: mcpRoute.arguments,
+			};
+		}
+		return {
+			kind: "tool_assisted_llm",
+			category: mcpRoute.category,
+			toolNames: mcpRoute.toolNames,
+		};
+	}
 	if (!webToolsEnabled)
 		return { kind: "llm", category: "conversation", toolNames: [] };
 	const webFollowUp = routeWebFollowUp(prompt, webContext);

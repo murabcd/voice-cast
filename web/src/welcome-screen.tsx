@@ -1,7 +1,8 @@
 import { ArrowRight, Globe2, MicOff, Play } from "lucide-react";
 import type React from "react";
 import { Button } from "@/components/ui/button";
-import type { Character, Phase } from "./app-types";
+import type { Character, Phase, ToolActivityProvider } from "./app-types";
+import { Icons } from "./icons";
 
 interface WelcomeScreenProps {
 	active: boolean;
@@ -16,7 +17,7 @@ interface WelcomeScreenProps {
 	phase: Phase;
 	previewAnimation: boolean;
 	selected: Character;
-	webSearchActive: boolean;
+	activeToolProvider: ToolActivityProvider | null;
 }
 
 export function WelcomeScreen({
@@ -32,10 +33,13 @@ export function WelcomeScreen({
 	phase,
 	previewAnimation,
 	selected,
-	webSearchActive,
+	activeToolProvider,
 }: WelcomeScreenProps) {
-	const phaseLabel =
-		phase === "warming" ? "Preparing" : phase[0].toUpperCase() + phase.slice(1);
+	const phaseLabel = activeToolProvider
+		? "Searching"
+		: phase === "warming"
+			? "Preparing"
+			: phase[0].toUpperCase() + phase.slice(1);
 	return (
 		<section className="welcome-screen">
 			<div className="welcome-inner">
@@ -70,12 +74,12 @@ export function WelcomeScreen({
 						</span>
 						<span aria-hidden="true" className="avatar-breath" />
 					</span>
-					{webSearchActive && (
+					{activeToolProvider && (
 						<output
-							className="web-search-indicator"
-							aria-label="Using web search"
+							className="tool-activity-indicator"
+							aria-label={toolActivityLabel(activeToolProvider)}
 						>
-							<Globe2 />
+							<ToolActivityIcon provider={activeToolProvider} />
 						</output>
 					)}
 					<span className="play-button">
@@ -139,4 +143,17 @@ export function WelcomeScreen({
 			</div>
 		</section>
 	);
+}
+
+function ToolActivityIcon({ provider }: { provider: ToolActivityProvider }) {
+	if (provider === "yandex-tracker") {
+		const YandexTrackerLogo = Icons.yandexTrackerLogo;
+		return <YandexTrackerLogo className="tracker-icon" />;
+	}
+	return <Globe2 />;
+}
+
+function toolActivityLabel(provider: ToolActivityProvider) {
+	if (provider === "yandex-tracker") return "Using Yandex Tracker";
+	return "Using web search";
 }

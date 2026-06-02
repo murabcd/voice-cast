@@ -13,6 +13,17 @@ function registry() {
 			],
 			callTool: async () => ({}),
 		},
+		mcpTools: {
+			enabled: true,
+			tools: [
+				{ name: "issue_get", description: "get issue", parameters: {} },
+				{ name: "issue_get_url", description: "get issue URL", parameters: {} },
+				{ name: "issues_find", description: "search issues", parameters: {} },
+			],
+			callTool: async () => ({}),
+		},
+		trackerDefaultQueue: "PROJ",
+		trackerLimitQueues: "PROJ,SUPPORT",
 	});
 }
 
@@ -69,6 +80,112 @@ describe("tool selector", () => {
 		).toMatchObject({
 			kind: "llm",
 			toolNames: [],
+		});
+	});
+
+	it("selects bounded MCP lookup tools for explicit tracker issue requests", () => {
+		expect(
+			selectToolsForTurn({
+				text: "Найди в Яндекс Трекере задачу CAST-123",
+				registry: registry(),
+			}),
+		).toMatchObject({
+			kind: "direct_tool_result",
+			category: "mcp_yandex_tracker_issue",
+			toolName: "yandex_tracker_get_issue",
+			arguments: { issueKey: "CAST-123" },
+		});
+	});
+
+	it("normalizes bare tracker numbers through the configured default queue", () => {
+		expect(
+			selectToolsForTurn({
+				text: "Найди в Яндекс Трекере тикет номер 8508",
+				registry: registry(),
+			}),
+		).toMatchObject({
+			kind: "direct_tool_result",
+			category: "mcp_yandex_tracker_issue",
+			toolName: "yandex_tracker_get_issue",
+			arguments: { issueKey: "PROJ-8508" },
+		});
+
+		expect(
+			selectToolsForTurn({
+				text: "Посмотри в Яндекс Трекере контекст по задаче 85 .08.",
+				registry: registry(),
+			}),
+		).toMatchObject({
+			kind: "direct_tool_result",
+			category: "mcp_yandex_tracker_issue",
+			toolName: "yandex_tracker_get_issue",
+			arguments: { issueKey: "PROJ-8508" },
+		});
+	});
+
+	it("uses the default queue when STT emits an unknown queue-like token", () => {
+		expect(
+			selectToolsForTurn({
+				text: "Там есть задача с номером Proge 8508.",
+				registry: registry(),
+			}),
+		).toMatchObject({
+			kind: "direct_tool_result",
+			category: "mcp_yandex_tracker_issue",
+			toolName: "yandex_tracker_get_issue",
+			arguments: { issueKey: "PROJ-8508" },
+		});
+
+		expect(
+			selectToolsForTurn({
+				text: "Мог бы ты проверить по задаче Pro 91 в Яндекс Трекере?",
+				registry: registry(),
+			}),
+		).toMatchObject({
+			kind: "direct_tool_result",
+			category: "mcp_yandex_tracker_issue",
+			toolName: "yandex_tracker_get_issue",
+			arguments: { issueKey: "PROJ-91" },
+		});
+	});
+
+	it("preserves known non-default tracker queues", () => {
+		expect(
+			selectToolsForTurn({
+				text: "Проверь задачу SUPPORT 91 в Яндекс Трекере",
+				registry: registry(),
+			}),
+		).toMatchObject({
+			kind: "direct_tool_result",
+			category: "mcp_yandex_tracker_issue",
+			toolName: "yandex_tracker_get_issue",
+			arguments: { issueKey: "SUPPORT-91" },
+		});
+	});
+
+	it("selects bounded MCP search tools for tracker search requests", () => {
+		expect(
+			selectToolsForTurn({
+				text: "Поищи в Яндекс Трекере задачи по TikTok",
+				registry: registry(),
+			}),
+		).toMatchObject({
+			kind: "tool_assisted_llm",
+			category: "mcp_yandex_tracker",
+			toolNames: ["yandex_tracker_search"],
+		});
+	});
+
+	it("selects bounded MCP metadata tools for tracker queue requests", () => {
+		expect(
+			selectToolsForTurn({
+				text: "Покажи очереди в Яндекс Трекере",
+				registry: registry(),
+			}),
+		).toMatchObject({
+			kind: "tool_assisted_llm",
+			category: "mcp_yandex_tracker",
+			toolNames: ["yandex_tracker_search"],
 		});
 	});
 

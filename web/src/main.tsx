@@ -6,6 +6,7 @@ import type { Screen, SettingsAction, SettingsState } from "./app-types";
 import "./avatar-animation.css";
 import { PickScreen } from "./pick-screen";
 import { SettingsDialog } from "./settings-dialog";
+import { SourceSheet } from "./source-sheet";
 import "./styles.css";
 import { useVoiceSession } from "./use-voice-session";
 import { castAgent } from "./voice-agent-config";
@@ -181,8 +182,10 @@ function App() {
 	};
 	const selectedVoicePrompt = `Character voice: ${selectedCharacterPrompt}`;
 
+	const sourcePanelOpen = voiceSession.toolResultOpen;
+
 	return (
-		<main className="app-shell">
+		<main className={`app-shell ${sourcePanelOpen ? "has-source-panel" : ""}`}>
 			<Button
 				type="button"
 				variant="ghost"
@@ -190,6 +193,16 @@ function App() {
 				onClick={() => setView({ screen: "welcome" })}
 			>
 				<span>Voice Cast</span>
+			</Button>
+			<Button
+				type="button"
+				variant="secondary"
+				className="sources-button"
+				onClick={() =>
+					voiceSession.setToolResultOpen(!voiceSession.toolResultOpen)
+				}
+			>
+				Sources
 			</Button>
 
 			{view.screen === "welcome" && (
@@ -208,7 +221,7 @@ function App() {
 					phase={voiceSession.phase}
 					previewAnimation={view.previewAnimation}
 					selected={selected}
-					webSearchActive={voiceSession.webSearchActive}
+					activeToolProvider={voiceSession.activeToolProvider}
 				/>
 			)}
 
@@ -230,6 +243,11 @@ function App() {
 				selected={selected}
 				selectedVoicePrompt={selectedVoicePrompt}
 				settings={settings}
+			/>
+			<SourceSheet
+				open={voiceSession.toolResultOpen}
+				result={voiceSession.toolResult}
+				onOpenChange={voiceSession.setToolResultOpen}
 			/>
 		</main>
 	);

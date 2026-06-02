@@ -8,17 +8,24 @@ export function createToolActivityHandler({
 		if (!canAccept()) return;
 		if (active && name) {
 			recordToolCall(turn, name);
-			if (name.startsWith("web_")) {
-				turn.webSearchActive = true;
+			const provider = toolActivityProvider(name);
+			if (provider) {
+				turn.activeToolProvider = provider;
 				sendToolState({ active, name });
 			}
 			return;
 		}
-		if (!turn.webSearchActive) sendToolState({ active: false, name });
+		if (!turn.activeToolProvider) sendToolState({ active: false, name });
 	};
 }
 
 export function resetToolActivity({ turn, sendToolState }) {
-	if (turn.webSearchActive) turn.webSearchActive = false;
+	if (turn.activeToolProvider) turn.activeToolProvider = undefined;
 	sendToolState({ active: false });
+}
+
+function toolActivityProvider(name) {
+	if (name.startsWith("web_")) return "web";
+	if (name.startsWith("yandex_tracker_")) return "yandex-tracker";
+	return undefined;
 }

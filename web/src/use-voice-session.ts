@@ -4,8 +4,15 @@ import type {
 	LanguageOption,
 	Phase,
 	SettingsState,
+	ToolActivityProvider,
+	ToolResultSummary,
 } from "./app-types";
 import { createBargeInDetector } from "./barge-in-detector";
+import {
+	parseToolActivityProvider,
+	parseToolResultSummary,
+	shouldAutoOpenToolResult,
+} from "./tool-result-wire";
 import { useAvatarAnimation } from "./use-avatar-animation";
 import { castAgent } from "./voice-agent-config";
 import {
@@ -48,7 +55,12 @@ export function useVoiceSession({
 }: UseVoiceSessionOptions) {
 	const [phase, setPhase] = React.useState<Phase>("idle");
 	const [active, setActive] = React.useState(false);
-	const [webSearchActive, setWebSearchActive] = React.useState(false);
+	const [activeToolProvider, setActiveToolProvider] =
+		React.useState<ToolActivityProvider | null>(null);
+	const [toolResult, setToolResult] = React.useState<ToolResultSummary | null>(
+		null,
+	);
+	const [toolResultOpen, setToolResultOpen] = React.useState(false);
 	const [playbackAnalyser, setPlaybackAnalyser] =
 		React.useState<AnalyserNode | null>(null);
 	const {
@@ -174,7 +186,7 @@ export function useVoiceSession({
 			micStreamRef.current = null;
 			micContextRef.current = null;
 			await stopPlayback();
-			setWebSearchActive(false);
+			setActiveToolProvider(null);
 			sttReadyRef.current = false;
 			serverPhaseRef.current = "idle";
 			bargeInDetector.reset();
@@ -249,8 +261,15 @@ export function useVoiceSession({
 			}
 
 			const msg = JSON.parse(event.data);
-			if (msg.type === "web_search") {
-				setWebSearchActive(Boolean(msg.active));
+			if (msg.type === "web_search" || msg.type === "tool_activity") {
+				setActiveToolProvider(parseToolActivityProvider(msg));
+			}
+			if (msg.type === "tool_result") {
+				const parsedToolResult = parseToolResultSummary(msg);
+				if (parsedToolResult) {
+					setToolResult(parsedToolResult);
+					setToolResultOpen(shouldAutoOpenToolResult());
+				}
 			}
 			if (msg.type === "stt_ready") {
 				sttReadyRef.current = Boolean(msg.ready);
@@ -271,7 +290,7 @@ export function useVoiceSession({
 				);
 			}
 			if (msg.type === "turn_done") {
-				setWebSearchActive(false);
+				setActiveToolProvider(null);
 				serverPhaseRef.current = "hearing";
 				bargeInDetector.reset();
 				if (!outputActiveRef.current) setPhase("hearing");
@@ -356,12 +375,16 @@ export function useVoiceSession({
 
 	return {
 		active,
+		activeToolProvider,
 		avatarIsListening,
 		avatarIsSpeaking,
 		handleStartStop: () => (active ? void stopChat() : void startChat()),
 		jawOpen,
 		listeningEnergy,
 		phase,
-		webSearchActive,
+		setToolResultOpen,
+		toolResult,
+		toolResultOpen,
+		webSearchActive: activeToolProvider === "web",
 	};
 }

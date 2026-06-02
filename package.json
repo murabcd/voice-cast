@@ -27,6 +27,7 @@
 	"type": "commonjs",
 	"dependencies": {
 		"@fontsource-variable/geist": "^5.2.9",
+		"@modelcontextprotocol/sdk": "^1.29.0",
 		"class-variance-authority": "^0.7.1",
 		"clsx": "^2.1.1",
 		"lucide-react": "^1.17.0",
@@ -36,7 +37,8 @@
 		"react-dom": "^19.1.0",
 		"shadcn": "^4.9.0",
 		"tailwind-merge": "^3.6.0",
-		"ws": "^8.21.0"
+		"ws": "^8.21.0",
+		"zod": "^3.25.76"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.4.16",

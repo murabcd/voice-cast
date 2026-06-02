@@ -57,6 +57,33 @@ export const config = {
 		),
 		maxFetchLinks: Number(process.env.OLLAMA_WEB_MAX_FETCH_LINKS ?? 5),
 	},
+	mcp: {
+		trackerDefaultQueue: process.env.TRACKER_DEFAULT_QUEUE,
+		trackerLimitQueues: process.env.TRACKER_LIMIT_QUEUES,
+		servers:
+			process.env.TRACKER_TOKEN &&
+			(process.env.TRACKER_CLOUD_ORG_ID || process.env.TRACKER_ORG_ID)
+				? [
+						{
+							name: "yandex-tracker",
+							command: process.env.YANDEX_TRACKER_MCP_COMMAND ?? "uvx",
+							args: (
+								process.env.YANDEX_TRACKER_MCP_ARGS ??
+								"yandex-tracker-mcp@latest"
+							)
+								.split(/\s+/)
+								.filter(Boolean),
+							env: {
+								TRACKER_TOKEN: process.env.TRACKER_TOKEN,
+								TRACKER_CLOUD_ORG_ID: process.env.TRACKER_CLOUD_ORG_ID,
+								TRACKER_ORG_ID: process.env.TRACKER_ORG_ID,
+								TRACKER_LIMIT_QUEUES: process.env.TRACKER_LIMIT_QUEUES,
+								TRANSPORT: "stdio",
+							},
+						},
+					]
+				: [],
+	},
 	logDir: join(root, "logs"),
 	webDir: join(root, "web"),
 	stt: {
