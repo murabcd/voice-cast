@@ -7,6 +7,7 @@ const voicePort = process.env.PORT ?? "8090";
 
 export default defineConfig({
 	plugins: [react(), tailwindcss()],
+	publicDir: "web/public",
 	resolve: {
 		alias: {
 			"@": path.resolve(__dirname, "web/src"),
