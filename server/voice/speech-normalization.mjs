@@ -1,20 +1,27 @@
 import {
 	digitNames,
+	domainPronunciationLexicon,
 	letterNames,
 	numberHundreds,
 	numberOnes,
 	numberTeens,
 	numberTens,
-	russianPronunciationRewrites,
 	spokenDictionary,
 	transliterationPairs,
 } from "./policy/pronunciation-policy.mjs";
+import { russianStressLexicon } from "./russian-stress-lexicon.mjs";
 
 const latinTokenRe = /\b[A-Za-z][A-Za-z0-9.+-]*\b/g;
 const percentRe = /(\d+(?:[.,]\d+)?)\s*%/g;
+const stressMark = "\u0301";
+const cyrillicWordRe =
+	/(?<![А-Яа-яЁё])([А-Яа-яЁё](?:[А-Яа-яЁё]|\u0301)*)(?![А-Яа-яЁё])/g;
+const domainPronunciationRe = createLexiconMatcher(domainPronunciationLexicon);
 
 export function normalizeRussianSpeechText(text) {
-	return applyRussianPronunciationRewrites(String(text ?? ""))
+	return applyRussianStressLexicon(
+		applyDomainPronunciationLexicon(String(text ?? "")),
+	)
 		.replace(
 			percentRe,
 			(_match, value) =>
@@ -23,6 +30,38 @@ export function normalizeRussianSpeechText(text) {
 		.replace(latinTokenRe, (token) => pronounceLatinToken(token))
 		.replace(/\s+/g, " ")
 		.trim();
+}
+
+function applyDomainPronunciationLexicon(text) {
+	if (!domainPronunciationRe) return text;
+	return text.replace(domainPronunciationRe, (match) => {
+		if (match.includes(stressMark)) return match;
+		const stressed = domainPronunciationLexicon.get(match.toLowerCase());
+		if (!stressed) return match;
+		return matchPhraseCapitalization(match, stressed);
+	});
+}
+
+function applyRussianStressLexicon(text) {
+	return text.replace(cyrillicWordRe, (word) => {
+		if (word.includes(stressMark)) return word;
+		const stressed = russianStressLexicon.get(word.toLowerCase());
+		if (!stressed) return word;
+		return matchCapitalization(word, stressed);
+	});
+}
+
+function createLexiconMatcher(lexicon) {
+	const sources = [...lexicon.keys()].sort((a, b) => b.length - a.length);
+	if (sources.length === 0) return undefined;
+	return new RegExp(
+		`(?<![А-Яа-яЁё])(${sources.map(escapeRegExp).join("|")})(?![А-Яа-яЁё])`,
+		"giu",
+	);
+}
+
+function escapeRegExp(value) {
+	return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function percentWord(value) {
@@ -110,15 +149,18 @@ function transliterateLatinWord(value) {
 }
 
 function matchCapitalization(source, value) {
-	if (/^[A-Z]+$/.test(source)) return value.toUpperCase();
-	if (/^[A-Z]/.test(source))
+	if (/^[A-ZА-ЯЁ]+$/.test(source)) return value.toUpperCase();
+	if (/^[A-ZА-ЯЁ]/.test(source))
 		return `${value[0].toUpperCase()}${value.slice(1)}`;
 	return value;
 }
 
-function applyRussianPronunciationRewrites(text) {
-	return russianPronunciationRewrites.reduce(
-		(out, [pattern, replacement]) => out.replace(pattern, replacement),
-		text,
-	);
+function matchPhraseCapitalization(source, value) {
+	const sourceWords = source.split(/\s+/);
+	const valueWords = value.split(/\s+/);
+	if (sourceWords.length !== valueWords.length)
+		return matchCapitalization(source, value);
+	return valueWords
+		.map((word, index) => matchCapitalization(sourceWords[index] ?? "", word))
+		.join(" ");
 }

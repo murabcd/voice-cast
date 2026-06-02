@@ -1,4 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { domainPronunciationLexicon } from "./policy/pronunciation-policy.mjs";
+import {
+	russianStressLexicon,
+	validateRussianStressEntry,
+} from "./russian-stress-lexicon.mjs";
 import { normalizeRussianSpeechText } from "./speech-normalization.mjs";
 
 describe("Russian speech normalization", () => {
@@ -36,6 +41,61 @@ describe("Russian speech normalization", () => {
 		expect(normalizeRussianSpeechText("Нужна помощь и нужна пауза.")).toBe(
 			"Нужна́ помощь и нужна́ пауза.",
 		);
+		expect(
+			normalizeRussianSpeechText(
+				"Вот информация с десятью каналами, одному пользователю и двумя командами.",
+			),
+		).toBe(
+			"Вот информация с десятью́ каналами, одному́ пользователю и двумя́ командами.",
+		);
+		expect(
+			normalizeRussianSpeechText(
+				"С тремя задачами, четырьмя каналами, пятью проектами, шестью файлами, семью участниками, восемью статусами и девятью ответами.",
+			),
+		).toBe(
+			"С тремя́ зада́чами, четырьмя́ каналами, пятью́ проектами, шестью́ файлами, семью́ участниками, восемью́ статусами и девятью́ ответами.",
+		);
+		expect(
+			normalizeRussianSpeechText(
+				"Для одного клиента, одной команды, одну задачу, одним каналом и одними настройками.",
+			),
+		).toBe(
+			"Для одного́ клиента, одно́й команды, одну́ задачу, одни́м каналом и одни́ми настройками.",
+		);
+		expect(
+			normalizeRussianSpeechText(
+				"Нужно понять, почему сейчас можно сделать лучше, поэтому начнем сначала.",
+			),
+		).toBe(
+			"Ну́жно понять, почему́ сейча́с мо́жно сделать лу́чше, поэ́тому начнем снача́ла.",
+		);
+		expect(
+			normalizeRussianSpeechText(
+				"Который пользователь должен выбрать первый вариант.",
+			),
+		).toBe("Кото́рый пользователь до́лжен выбрать пе́рвый вариант.");
+	});
+
+	it("does not double-stress already stressed common Russian words", () => {
+		expect(normalizeRussianSpeechText("Нужна́ помощь сейча́с.")).toBe(
+			"Нужна́ помощь сейча́с.",
+		);
+	});
+
+	it("keeps the Russian stress lexicon normalized", () => {
+		for (const [source, stressed] of russianStressLexicon) {
+			expect(validateRussianStressEntry(source, stressed)).toBeUndefined();
+		}
+	});
+
+	it("keeps ordinary Russian stress separate from pronunciation policy rewrites", () => {
+		expect(russianStressLexicon.has("нужна")).toBe(true);
+		expect(russianStressLexicon.has("десятью")).toBe(true);
+		expect(russianStressLexicon.has("адрес")).toBe(true);
+		expect(russianStressLexicon.has("уральские авиалинии")).toBe(false);
+		expect(domainPronunciationLexicon.has("уральские авиалинии")).toBe(true);
+		expect(domainPronunciationLexicon.has("нужна")).toBe(false);
+		expect(domainPronunciationLexicon.has("десятью")).toBe(false);
 	});
 
 	it("expands percent signs for Russian speech", () => {
