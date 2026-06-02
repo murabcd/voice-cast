@@ -3,6 +3,13 @@ import { mkdir } from "node:fs/promises";
 import WebSocket, { WebSocketServer } from "ws";
 import { McpTools } from "./ai/tools/mcp-tools.mjs";
 import { OllamaWebTools } from "./ai/tools/ollama-web-tools.mjs";
+import { buildVoiceToolRegistry } from "./ai/tools/tool-registry.mjs";
+import {
+	buildRuntimeCapabilities,
+	capabilityReply,
+	isCapabilityQuestion,
+	runtimeCapabilityContext,
+} from "./voice/capabilities.mjs";
 import { parseClientSettingsMessage } from "./voice/client-settings.mjs";
 import { config } from "./voice/config.mjs";
 import { startImmediateTurn } from "./voice/immediate-turn.mjs";
@@ -238,6 +245,20 @@ async function handleFinal(ws, transcript) {
 	const startedAt = Date.now();
 	const settings = clientSettings.get(ws) ?? {};
 	const history = clientHistory.get(ws) ?? createSessionHistory();
+	const registry = buildVoiceToolRegistry({
+		settings,
+		webTools,
+		mcpTools,
+		trackerDefaultQueue: config.mcp?.trackerDefaultQueue,
+		trackerLimitQueues: config.mcp?.trackerLimitQueues,
+	});
+	const capabilities = buildRuntimeCapabilities({
+		registry,
+		settings,
+		webTools,
+		mcpTools,
+	});
+	const runtimeContext = runtimeCapabilityContext(capabilities);
 	const { controller, turn, turnId } = turnRuntime.begin({
 		startedAt,
 		transcript: normalizedTranscript,
@@ -279,12 +300,19 @@ async function handleFinal(ws, transcript) {
 		return;
 	}
 
+	if (isCapabilityQuestion(normalizedTranscript)) {
+		completeImmediateReply(turn, capabilityReply(capabilities));
+		return;
+	}
+
 	try {
 		const messages = await planReply({
 			config,
 			history: history.messages(),
 			historyContext: { web: history.webContext() },
+			registry,
 			prompt: normalizedTranscript,
+			runtimeContext,
 			settings,
 			signal: controller.signal,
 			toolManager: webTools,
@@ -300,6 +328,7 @@ async function handleFinal(ws, transcript) {
 			url: config.llamaUrl,
 			history: history.messages(),
 			prompt: normalizedTranscript,
+			runtimeContext,
 			signal: controller.signal,
 			systemPrompt: settings.systemPrompt,
 			messages,

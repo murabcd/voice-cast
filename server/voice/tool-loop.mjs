@@ -174,6 +174,7 @@ export async function prepareDirectWebSearchMessages({
 	prompt,
 	searchQuery,
 	systemPrompt,
+	runtimeContext,
 	signal,
 	toolManager,
 	onToolActivity,
@@ -182,6 +183,7 @@ export async function prepareDirectWebSearchMessages({
 	const compactHistory = Array.isArray(history) ? history.slice(-2) : history;
 	const messages = buildVoiceMessages({
 		prompt,
+		runtimeContext,
 		systemPrompt,
 		history: compactHistory,
 	});
@@ -207,6 +209,7 @@ export async function prepareDirectToolResultMessages({
 	history,
 	prompt,
 	systemPrompt,
+	runtimeContext,
 	signal,
 	toolManager,
 	toolName,
@@ -216,6 +219,7 @@ export async function prepareDirectToolResultMessages({
 }) {
 	const messages = buildVoiceMessages({
 		prompt,
+		runtimeContext,
 		systemPrompt,
 		history: Array.isArray(history) ? history.slice(-2) : history,
 	});
@@ -318,6 +322,7 @@ export async function prepareToolAugmentedMessages({
 	llamaUrl,
 	history,
 	prompt,
+	runtimeContext,
 	systemPrompt,
 	signal,
 	toolManager,
@@ -330,7 +335,12 @@ export async function prepareToolAugmentedMessages({
 	onToolActivity,
 	onToolResult,
 }) {
-	const messages = buildVoiceMessages({ prompt, systemPrompt, history });
+	const messages = buildVoiceMessages({
+		prompt,
+		runtimeContext,
+		systemPrompt,
+		history,
+	});
 	const baseMessages = [...messages];
 	if (!toolManager?.tools?.length)
 		throw new Error("Selected tool route has no available tools.");

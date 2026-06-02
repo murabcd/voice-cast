@@ -12,7 +12,9 @@ export async function planReply({
 	config,
 	history,
 	historyContext,
+	registry: providedRegistry,
 	prompt,
+	runtimeContext,
 	settings,
 	signal,
 	toolManager,
@@ -24,13 +26,15 @@ export async function planReply({
 	const onToolActivity = (state) => emit({ type: "tool_activity", ...state });
 	const onToolResult = (event) => emit(event);
 
-	const registry = buildVoiceToolRegistry({
-		settings,
-		webTools: toolManager,
-		mcpTools,
-		trackerDefaultQueue: config.mcp?.trackerDefaultQueue,
-		trackerLimitQueues: config.mcp?.trackerLimitQueues,
-	});
+	const registry =
+		providedRegistry ??
+		buildVoiceToolRegistry({
+			settings,
+			webTools: toolManager,
+			mcpTools,
+			trackerDefaultQueue: config.mcp?.trackerDefaultQueue,
+			trackerLimitQueues: config.mcp?.trackerLimitQueues,
+		});
 	const plan = selectToolsForTurn({
 		text: prompt,
 		registry,
@@ -93,6 +97,7 @@ export async function planReply({
 			prompt,
 			searchQuery: plan.query,
 			history,
+			runtimeContext,
 			signal,
 			systemPrompt: settings.systemPrompt,
 			toolManager: selectedToolManager,
@@ -104,6 +109,7 @@ export async function planReply({
 		return await prepareDirectToolResultMessages({
 			prompt,
 			history,
+			runtimeContext,
 			signal,
 			systemPrompt: settings.systemPrompt,
 			toolManager: selectedToolManager,
@@ -117,6 +123,7 @@ export async function planReply({
 		llamaUrl: config.llamaUrl,
 		prompt,
 		history,
+		runtimeContext,
 		signal,
 		systemPrompt: settings.systemPrompt,
 		toolManager: selectedToolManager,

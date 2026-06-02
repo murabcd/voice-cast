@@ -18,11 +18,18 @@ export function buildVoiceMessages({
 	prompt,
 	systemPrompt = russianVoiceSystemPrompt,
 	history = [],
+	runtimeContext,
 }) {
+	const resolvedSystemPrompt = [
+		systemPrompt || russianVoiceSystemPrompt,
+		runtimeContext,
+	]
+		.filter(Boolean)
+		.join("\n\n");
 	return [
 		{
 			role: "system",
-			content: systemPrompt || russianVoiceSystemPrompt,
+			content: resolvedSystemPrompt,
 		},
 		...history,
 		{
