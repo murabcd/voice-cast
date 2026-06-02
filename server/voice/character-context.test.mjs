@@ -38,7 +38,37 @@ describe("character context", () => {
 		expect(context).toContain("Grumpy Wizard");
 		expect(context).toContain("ворчливый, но добрый волшебник");
 		expect(context).toContain("Можно слегка ворчать");
+		expect(context).toContain("используй мужской род");
 		expect(context).toContain("Use the character only for tone");
+	});
+
+	it("uses female self-reference grammar for female characters", () => {
+		const vampireContext = runtimeCharacterContext({
+			characterId: 2,
+			language: "ru",
+		});
+		const grandmaContext = runtimeCharacterContext({
+			characterId: 5,
+			language: "ru",
+		});
+		const princessContext = runtimeCharacterContext({
+			characterId: 7,
+			language: "ru",
+		});
+
+		expect(vampireContext).toContain("используй женский род");
+		expect(grandmaContext).toContain("используй женский род");
+		expect(princessContext).toContain("используй женский род");
+		expect(princessContext).toContain("готова, поняла, посмотрела");
+	});
+
+	it("uses explicit first-person point of view in English", () => {
+		expect(
+			runtimeCharacterContext({ characterId: 7, language: "en" }),
+		).toContain("female first-person point of view");
+		expect(
+			runtimeCharacterContext({ characterId: 1, language: "en" }),
+		).toContain("male first-person point of view");
 	});
 
 	it("keeps internal names stable while localizing spoken names", () => {
