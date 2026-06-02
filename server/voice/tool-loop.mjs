@@ -40,6 +40,27 @@ export function parseToolCalls(text) {
 	return calls;
 }
 
+function dedupeToolCalls(calls) {
+	const seen = new Set();
+	return calls.filter((call) => {
+		const key = `${call.name}\0${stableJson(call.arguments)}`;
+		if (seen.has(key)) return false;
+		seen.add(key);
+		return true;
+	});
+}
+
+function stableJson(value) {
+	if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+	if (value && typeof value === "object") {
+		return `{${Object.keys(value)
+			.sort()
+			.map((key) => `${JSON.stringify(key)}:${stableJson(value[key])}`)
+			.join(",")}}`;
+	}
+	return JSON.stringify(value);
+}
+
 function appendDirectWebSearchResultMessage(messages, compactResult) {
 	messages.push({
 		role: "user",
@@ -388,9 +409,16 @@ export async function prepareToolAugmentedMessages({
 			onToolActivity?.({ active: false });
 			break;
 		}
+		const uniqueCalls = dedupeToolCalls(calls);
+		if (uniqueCalls.length !== calls.length) {
+			log(
+				"tool",
+				`dedupe round=${round + 1} requested=${calls.length} unique=${uniqueCalls.length}`,
+			);
+		}
 		usedTool = true;
 		const results = await callTools({
-			calls,
+			calls: uniqueCalls,
 			toolManager,
 			onToolActivity,
 			round: round + 1,

@@ -111,6 +111,56 @@ describe("SmolLM3 tool call parsing", () => {
 		expect(primerMessage?.content).not.toContain("x".repeat(300));
 	});
 
+	it("deduplicates repeated model-planned tool calls before execution", async () => {
+		completeLlamaReply.mockResolvedValueOnce(
+			[
+				'<tool_call>{"name":"files__read","arguments":{"path":"/tmp/a.txt","encoding":"utf8"}}</tool_call>',
+				'<tool_call>{"name":"files__read","arguments":{"encoding":"utf8","path":"/tmp/a.txt"}}</tool_call>',
+			].join("\n"),
+		);
+		const calls = [];
+
+		await prepareToolAugmentedMessages({
+			llamaUrl: "http://127.0.0.1:18081",
+			history: [],
+			prompt: "Read the file.",
+			systemPrompt: "Answer briefly.",
+			signal: new AbortController().signal,
+			toolManager: {
+				enabled: true,
+				tools: [
+					{
+						name: "files__read",
+						description: "read file",
+						parameters: {
+							properties: {
+								path: { type: "string" },
+								encoding: { type: "string" },
+							},
+						},
+					},
+				],
+				callTool: async (name, args) => {
+					calls.push({ name, args });
+					return { verified: true, results: [{ content: "file body" }] };
+				},
+			},
+			maxTokens: 64,
+			temperature: 0,
+			topP: 1,
+			repeatPenalty: 1,
+			rounds: 1,
+			decisionMaxTokens: 64,
+		});
+
+		expect(calls).toEqual([
+			{
+				name: "files__read",
+				args: { path: "/tmp/a.txt", encoding: "utf8" },
+			},
+		]);
+	});
+
 	it("keeps MCP no-tool planning sentinels out of final answer messages", async () => {
 		completeLlamaReply.mockResolvedValueOnce("NO_TOOL");
 		const messages = await prepareToolAugmentedMessages({
