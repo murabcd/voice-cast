@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/drawer";
 import type { ToolResultSummary } from "./app-types";
 import { Icons } from "./icons";
+import { cn } from "./lib/utils";
 
 interface SourceSheetProps {
 	open: boolean;
@@ -33,11 +34,18 @@ export function SourceSheet({ open, result, onOpenChange }: SourceSheetProps) {
 		return (
 			<div
 				aria-hidden={!open}
-				className="source-docked-viewport"
+				className="pointer-events-none fixed top-0 right-0 z-30 h-screen overflow-hidden"
 				style={{ width: panelWidth }}
 			>
 				<aside
-					className={`source-docked-panel group/docked-sheet ${open ? "is-open" : ""} ${isResizing ? "is-resizing" : ""}`}
+					className={cn(
+						"group/docked-sheet relative flex h-svh flex-col overflow-hidden border-l border-border bg-background text-foreground transition-transform duration-200 ease-linear",
+						open
+							? "pointer-events-auto translate-x-0"
+							: "pointer-events-none translate-x-full",
+						isResizing && "is-resizing transition-none",
+						"[[data-source-panel-resizing=true]_&]:transition-none",
+					)}
 					aria-label="Sources"
 					style={{ width: panelWidth }}
 				>
@@ -45,11 +53,11 @@ export function SourceSheet({ open, result, onOpenChange }: SourceSheetProps) {
 						type="button"
 						aria-label="Resize sources panel"
 						title={`Resize sources panel: ${Math.round(panelWidth)}px`}
-						className="source-panel-resize-handle"
+						className="absolute inset-y-0 -left-2.5 z-5 flex w-5 !cursor-col-resize touch-none items-center justify-center border-0 bg-transparent text-[#050505]/45 opacity-0 transition-[opacity,color] duration-150 ease-out hover:!cursor-col-resize hover:text-[#050505]/60 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:-outline-offset-3 focus-visible:outline-[#050505] group-hover/docked-sheet:opacity-100 group-focus-within/docked-sheet:opacity-100 [.is-resizing_&]:opacity-100 [.is-resizing_&]:text-[#050505]/60 [&_span]:h-[72px] [&_span]:w-[5px] [&_span]:rounded-full [&_span]:bg-[#050505]/7 [&_span]:transition-[background,width] [&_span]:duration-150 [&_span]:ease-out hover:[&_span]:w-1.5 hover:[&_span]:bg-[#050505]/12 focus-visible:[&_span]:w-1.5 focus-visible:[&_span]:bg-[#050505]/12 [.is-resizing_&>span]:w-1.5 [.is-resizing_&>span]:bg-[#050505]/12"
 						onPointerDown={handleResizeStart}
 						onKeyDown={handleResizeKeyDown}
 					>
-						<span className="source-panel-resize-grip" />
+						<span />
 					</button>
 					<SourcePanel result={result} onClose={() => onOpenChange(false)} />
 				</aside>
@@ -59,7 +67,7 @@ export function SourceSheet({ open, result, onOpenChange }: SourceSheetProps) {
 
 	return (
 		<Drawer open={open} onOpenChange={onOpenChange}>
-			<DrawerContent className="source-drawer">
+			<DrawerContent className="max-h-[min(82svh,680px)] gap-0 overflow-hidden rounded-t-[18px]">
 				<DrawerTitle className="sr-only">
 					{result?.title ?? "Sources"}
 				</DrawerTitle>
@@ -82,8 +90,8 @@ function SourcePanel({
 	const sections = result?.sections ?? [];
 	return (
 		<>
-			<header className="source-panel-header">
-				<div className="source-panel-title">
+			<header className="flex min-h-[70px] items-start gap-4 px-[22px] pt-[22px] pr-[52px]">
+				<div className="flex min-h-8 min-w-0 flex-1 items-center gap-2 [&_h2]:m-0 [&_h2]:min-w-0 [&_h2]:truncate [&_h2]:text-sm [&_h2]:font-bold [&_h2]:text-[#050505]">
 					{result && <ProviderIcon result={result} />}
 					{result && <h2>{result.title}</h2>}
 				</div>
@@ -93,16 +101,16 @@ function SourcePanel({
 					type="button"
 					variant="ghost"
 					size="icon"
-					className="source-panel-close"
+					className="absolute top-5 right-[22px]"
 					onClick={onClose}
 				>
 					<XIcon />
 					<span className="sr-only">Close</span>
 				</Button>
 			)}
-			<div className="source-panel-body">
+			<div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto px-[22px] pb-[22px]">
 				{!result && (
-					<div className="source-empty">
+					<div className="flex min-h-[280px] flex-1 flex-col items-center justify-center gap-2 text-center [&_h2]:m-0 [&_h2]:text-sm [&_h2]:font-bold [&_h2]:text-[#050505] [&_p]:m-0 [&_p]:max-w-[220px] [&_p]:text-[13px] [&_p]:leading-[1.45] [&_p]:text-[#5d5d5d]">
 						<h2>No sources yet</h2>
 						<p>
 							Web and Yandex Tracker results will appear here after a tool
@@ -114,8 +122,8 @@ function SourcePanel({
 				{result && (
 					<>
 						{sections.length > 0 && (
-							<section className="source-result">
-								<div className="source-result-lines">
+							<section className="flex min-w-0 flex-col gap-4">
+								<div className="flex min-w-0 flex-col gap-4">
 									{sections.map((line) => (
 										<SourceSection key={line.label} section={line} />
 									))}
@@ -124,8 +132,10 @@ function SourcePanel({
 						)}
 
 						{result.sources.length > 0 && (
-							<section className="source-links">
-								<h2 className="source-links-title">Sources</h2>
+							<section className="flex min-w-0 flex-col gap-2">
+								<h2 className="m-0 text-[13px] leading-[1.2] font-bold text-[#5d5d5d]">
+									Sources
+								</h2>
 								<div className="flex flex-col gap-0.5">
 									{result.sources.map((source) => (
 										<SourceRow
@@ -149,9 +159,11 @@ function SourceSection({
 	section: ToolResultSummary["sections"][number];
 }) {
 	return (
-		<section className="source-result-section">
+		<section className="flex min-w-0 flex-col gap-2 [&_h3]:m-0 [&_h3]:text-[13px] [&_h3]:leading-[1.2] [&_h3]:font-bold [&_h3]:text-[#5d5d5d]">
 			<h3>{section.label}</h3>
-			<p className="source-result-text">{sourcePreviewText(section.text)}</p>
+			<p className="m-0 min-w-0 text-sm leading-[1.45] break-words text-[#1f1f1f] [overflow-wrap:anywhere]">
+				{sourcePreviewText(section.text)}
+			</p>
 		</section>
 	);
 }
@@ -176,7 +188,11 @@ function SourceRow({
 	source: ToolResultSummary["sources"][number];
 }) {
 	if (!source.url) {
-		return <div className="source-link-static">{source.title}</div>;
+		return (
+			<div className="flex min-w-0 items-center gap-2 rounded-lg p-0 text-sm leading-[1.45] break-words text-[#1f1f1f] [overflow-wrap:anywhere]">
+				{source.title}
+			</div>
+		);
 	}
 
 	return (
@@ -184,7 +200,7 @@ function SourceRow({
 			href={source.url}
 			target="_blank"
 			rel="noreferrer"
-			className="source-link-row"
+			className="flex min-w-0 items-center gap-2 rounded-lg p-0 text-sm leading-[1.45] break-words text-[#1f1f1f] no-underline transition-colors duration-140 ease-out hover:text-[#050505] [overflow-wrap:anywhere] [&_span]:min-w-0 [&_span]:flex-1 [&_span]:truncate [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-[#5d5d5d]"
 		>
 			<span>{source.title}</span>
 			<ExternalLink />

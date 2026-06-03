@@ -8,6 +8,7 @@ import { PickScreen } from "./pick-screen";
 import { SettingsDialog } from "./settings-dialog";
 import { SourceSheet } from "./source-sheet";
 import "./styles.css";
+import { cn } from "./lib/utils";
 import { useVoiceSession } from "./use-voice-session";
 import { castAgent } from "./voice-agent-config";
 import { WelcomeScreen } from "./welcome-screen";
@@ -188,11 +189,23 @@ function App() {
 	const sourcePanelOpen = voiceSession.toolResultOpen;
 
 	return (
-		<main className={`app-shell ${sourcePanelOpen ? "has-source-panel" : ""}`}>
+		<main
+			className={cn(
+				"relative min-h-screen bg-white text-[#050505] [--source-panel-width:var(--source-panel-width-current,256px)] min-[900px]:transition-[padding-right] min-[900px]:duration-200 min-[900px]:ease-linear",
+				sourcePanelOpen && "min-[900px]:pr-(--source-panel-width)",
+			)}
+		>
 			<Button
 				type="button"
 				variant="ghost"
-				className="brand"
+				className={cn(
+					"fixed top-[22px] left-7 z-20 flex h-auto items-center gap-[9px] border-0 bg-transparent p-0 text-[#050505] no-underline transition-opacity duration-180 ease-out hover:opacity-60",
+					"[&_span]:font-['Geist_Pixel',ui-sans-serif,system-ui] [&_span]:text-[25px]",
+					"max-[760px]:top-4 max-[760px]:left-4 max-[760px]:[&_span]:text-xl",
+					"hover:bg-transparent focus-visible:bg-transparent aria-expanded:bg-transparent",
+					sourcePanelOpen &&
+						"min-[900px]:max-w-[calc(100vw-var(--source-panel-width)-56px)]",
+				)}
 				onClick={() => setView({ screen: "welcome" })}
 			>
 				<span>Voice Cast</span>
@@ -200,7 +213,14 @@ function App() {
 			<Button
 				type="button"
 				variant="secondary"
-				className="sources-button"
+				className={cn(
+					"fixed top-[22px] right-7 z-20 transition-[right] duration-200 ease-linear",
+					"max-[760px]:top-3 max-[760px]:right-4 max-[760px]:h-[34px] max-[760px]:rounded-xl max-[760px]:px-[13px] max-[760px]:text-sm max-[760px]:font-[650]",
+					sourcePanelOpen &&
+						"min-[900px]:right-[calc(var(--source-panel-width)+28px)]",
+					"[[data-source-panel-resizing-pending=true]_&]:pointer-events-none [[data-source-panel-resizing-pending=true]_&]:cursor-default [[data-source-panel-resizing-pending=true]_&]:bg-[#e9e9e9] [[data-source-panel-resizing-pending=true]_&]:transition-none",
+					"[[data-source-panel-resizing=true]_&]:pointer-events-none [[data-source-panel-resizing=true]_&]:cursor-default [[data-source-panel-resizing=true]_&]:bg-[#e9e9e9] [[data-source-panel-resizing=true]_&]:transition-none",
+				)}
 				onClick={() =>
 					voiceSession.setToolResultOpen(!voiceSession.toolResultOpen)
 				}
